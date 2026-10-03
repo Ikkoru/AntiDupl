@@ -1,0 +1,15 @@
+# User-defined PNG text keywords used by AI image generators, so ExifTool can WRITE them
+# (it can already read any keyword). Keys are the exact PNG tEXt/zTXt/iTXt keywords.
+%Image::ExifTool::UserDefined = (
+    'Image::ExifTool::PNG::TextualData' => {
+        prompt             => { },   # ComfyUI API-format graph (JSON)
+        workflow           => { },   # ComfyUI UI workflow (JSON)
+        invokeai_metadata  => { },   # InvokeAI
+        invokeai_graph     => { },   # InvokeAI
+        'sd-metadata'      => { },   # old InvokeAI
+        Dream              => { },   # old InvokeAI
+        fooocus_scheme     => { },   # Fooocus
+        'generation_data'  => { },   # misc. UIs
+    },
+);
+1;  # end

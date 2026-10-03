@@ -1,0 +1,6 @@
+numpy
+pillow
+scikit-image
+imagehash
+ssimulacra2
+piexif
