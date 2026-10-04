@@ -70,6 +70,11 @@ Visual Studio with the v143 toolset, ".NET desktop" + "Desktop C++" workloads, .
 (`vcpkg integrate install`); open `src/AntiDupl.sln`, build x64 Release. There are no automated tests in the
 repo: each document ends with a manual test list, and `tools/` re-computes the expected numbers.
 
+Two practical traps: the C# build events call `.cmd` scripts with unquoted paths, so the solution doesn't
+build from a folder with spaces or commas (task T0); and a dev build uses the same user-data folder as the
+installed release unless started with `-s <folder>` — keep the user's real settings, image DB and mistakes
+list out of reach (FILE_VERSION 5 files can't be read by the release).
+
 ## Tools on the local machine
 
 Claude Code runs commands through its shell, so executables are found via that shell's **PATH** (inherited

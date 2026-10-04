@@ -6,6 +6,10 @@ Each P0/P1 item should be its own commit (and, where marked ⬆, its own upstrea
 
 ## P0 — Bugs (root causes proven)
 
+- [ ] **T0 ⬆ Build fails from folders with spaces/commas** (the user's case). Quote the paths in the C# build
+      events (`AntiDupl.NET.WinForms.csproj:43` → `CopyData.cmd`, `AntiDupl.NET.Core.csproj:75` → `External.cmd`)
+      and make both scripts use `%~1`/`%~2` with quoted expansions. Done when a clean x64 Release build succeeds
+      under `…\Coding, etc\Claude Code\Anti-Dupl\AntiDupl.NET`.
 - [ ] **T1 ⬆ TurboJPEG decodes red/blue swapped.** `TJPF_RGBA` → `TJPF_BGRA` in `src/AntiDupl/adTurboJpeg.cpp:59`.
       Done when: `plan/tools/repro_difference.py` cases behave as listed and the real build shows `0.00` for both
       "Identical" example pairs; previews of JFIF JPEGs under >260-char paths show correct colours
