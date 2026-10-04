@@ -16,7 +16,7 @@ Always computed (pip install -r requirements.txt):
   NOTE: disagrees with the reference on downscaled images, prefer the native tools below).
 Optional native tools, looked up in --tool-dir / %ANTIDUPL_TOOL_DIRS% first, then PATH:
   ssimulacra2, butteraugli_main  libjxl reference tools (Windows: jxl-x64-windows-static.zip from
-                                 github.com/libjxl/libjxl/releases, folder bin\)
+                                 github.com/libjxl/libjxl/releases, its bin folder)
   butteraugli     (cargo install butteraugli-cli)   -> pure-Rust Butteraugli, max-norm and 3-norm
   ssimulacra2_rs  (cargo install ssimulacra2_rs --no-default-features)
   dssim           (cargo install dssim)
@@ -216,7 +216,8 @@ def main():
         d, v, g = grp("dup"), grp("var"), grp("geo")
         higher_is_closer = "higher=closer" in k
         sep = (max(v) < min(d)) if higher_is_closer else (min(v) > max(d))
-        print(f"| {k} | {min(d):.4g} – {max(d):.4g} | {min(v):.4g} – {max(v):.4g} | {min(g):.4g} – {max(g):.4g} | {'yes' if sep else 'no'} |")
+        # ASCII only: a cp932 console cannot encode an en dash.
+        print(f"| {k} | {min(d):.4g} - {max(d):.4g} | {min(v):.4g} - {max(v):.4g} | {min(g):.4g} - {max(g):.4g} | {'yes' if sep else 'no'} |")
     return 0
 
 
