@@ -36,3 +36,4 @@ Pointers for whoever picks this up (from reading the code, not researched furthe
 | A8 | Explicit identity flags in `adResult` instead of the `1e-6` CRC epsilon | `AntiDupl.h` `adResult`, `CoreDll.cs` | cleaner than encoding state in a float (ABI change) |
 | A9 | `/fp:fast` for the whole core | [Prop.props:39](../src/Prop.props#L39) | covered in [01](01-difference-correctness.md) |
 | A10 | Tooltip on the Difference cell with the full-precision value | ResultRowSetter | sorting is exact, display isn't |
+| A11 | Compile with `/utf-8`: the C++ sources are UTF-8, most without BOM, so MSVC reads them in the ANSI code page (warning C4819). On a CJK-locale PC a comment ending in Cyrillic/CJK text then swallows its line end — harmless with a CRLF checkout, but with LF line ends the next line of code joins the comment | [Prop.props](../src/Prop.props) `AdditionalOptions` | upstreamable; the user's PC (cp932) builds with `CL=/utf-8` meanwhile |

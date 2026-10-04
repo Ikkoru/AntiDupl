@@ -53,7 +53,7 @@ Small, independent PRs against `ermig1979/AntiDupl:master` (active maintainer: E
 
 ## Build & verify
 
-Visual Studio with the v143 toolset, ".NET desktop" + "Desktop C++" workloads, .NET 10 SDK, vcpkg integrated (`vcpkg integrate install`); open `src/AntiDupl.sln`, build x64 Release. There are no automated tests in the repo: each document ends with a manual test list, and `tools/` re-computes the expected numbers.
+Visual Studio or its Build Tools with the ".NET desktop" + "Desktop C++" workloads, the v143 toolset (or another passed as `-p:PlatformToolset=…`, as on the user's PC), .NET 10 SDK, vcpkg integrated (`vcpkg integrate install`); build `src/AntiDupl.sln` x64 Release. There are no automated tests in the repo: each document ends with a manual test list, and `tools/` re-computes the expected numbers.
 
 Two practical traps: the C# build events call `.cmd` scripts with unquoted paths, so the solution doesn't build from a folder with spaces or commas (task T0); and a dev build uses the same user-data folder as the installed release unless started with `-s <folder>` — keep the user's real settings, image DB and mistakes list out of reach (FILE_VERSION 5 files can't be read by the release).
 

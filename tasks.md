@@ -31,7 +31,7 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
 
       Code pointers only (not researched) → [06 § S2](plan/06-stretch-and-ameliorations.md)
 - [x] **S3 Research better comparison engines for my purposes** — done: Butteraugli best, cheap colour block metric second; hashes/DSSIM/SSIM variants unsuitable; size study. → [02](plan/02-comparison-modes.md)
-- [ ] **S4 Other ameliorations** found while reading the code (HEIF-with-alpha bug, JPEG-quality and bits-per-pixel columns, hint policy for identical pairs, EXIF orientation, crop-tolerant alignment, colour-aware difference highlighting, explicit identity flags, tooltip) → [06 § S4](plan/06-stretch-and-ameliorations.md)
+- [ ] **S4 Other ameliorations** found while reading the code (HEIF-with-alpha bug, JPEG-quality and bits-per-pixel columns, hint policy for identical pairs, EXIF orientation, crop-tolerant alignment, colour-aware difference highlighting, explicit identity flags, tooltip, `/utf-8` for the C++ sources) → [06 § S4](plan/06-stretch-and-ameliorations.md)
 
 ## Notes for the implementing session
 
