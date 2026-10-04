@@ -1,7 +1,6 @@
 # Reproduction & experiment tools
 
-Python 3.10+. `pip install -r requirements.txt`. Nothing here is part of the build; it exists so every
-number quoted in [`../`](../README.md) can be re-checked on your machine (the scripts run on Windows too).
+Python 3.10+. `pip install -r requirements.txt`. Nothing here is part of the build; it exists so every number quoted in [`../`](../README.md) can be re-checked on your machine (the scripts run on Windows too).
 
 | Script | What it shows | Example |
 |---|---|---|

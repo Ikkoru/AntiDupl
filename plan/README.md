@@ -1,15 +1,10 @@
 # AntiDupl local build — research results and implementation plan
 
-Hand-off for a local Claude Code session (Windows 11, Visual Studio + vcpkg) working on the fork
-`Ikkoru/AntiDupl` (base: upstream `ermig1979/AntiDupl` `e06d082`, v2.3.13). The checklist is in
-[`../tasks.md`](../tasks.md); this folder holds the evidence and the designs.
+Hand-off for a local Claude Code session (Windows 11, Visual Studio + vcpkg) working on the fork `Ikkoru/AntiDupl` (base: upstream `ermig1979/AntiDupl` `e06d082`, v2.3.13). The checklist is in [`../tasks.md`](../tasks.md); this folder holds the evidence and the designs.
 
 ## The user's setup (from `options.xml` / `default.xml`)
 
-*Table of horizontal pairs*, algorithm **SSIM**, threshold **1 %**, sorted by **Difference ascending**,
-reduced image size 128, *use database of image* on, *use libjpeg-turbo* on, compare inside one search path,
-3 artist folders per scan. Hot keys: NumPad1/NumPad2 delete first/second, NumPad5 mistake, Ctrl+D external
-diff ("QS Compare" script). Goal: delete the worse-compressed copy, keep similar-but-distinct images.
+*Table of horizontal pairs*, algorithm **SSIM**, threshold **1 %**, sorted by **Difference ascending**, reduced image size 128, *use database of image* on, *use libjpeg-turbo* on, compare inside one search path, 3 artist folders per scan. Hot keys: NumPad1/NumPad2 delete first/second, NumPad5 mistake, Ctrl+D external diff ("QS Compare" script). Goal: delete the worse-compressed copy, keep similar-but-distinct images.
 
 ## Decisions taken with the user
 
@@ -35,24 +30,16 @@ diff ("QS Compare" script). Goal: delete the worse-compressed copy, keep similar
 | 8 | (stretch) keep metadata of the deleted copy | — | [05](05-metadata-merge.md) | — |
 | 9 | (stretch) QuantSmooth pre-pass, other improvements | — | [06](06-stretch-and-ameliorations.md) | — |
 
-Reproduction (any OS with Python): `tools/repro_difference.py` prints 0.217453 / 0.076530 / 0.000496 for the
-three example pairs — AntiDupl shows 0.22 / 0.08 / 0.00 — and 0 / 0 / 0.000253 after the fixes.
+Reproduction (any OS with Python): `tools/repro_difference.py` prints 0.217453 / 0.076530 / 0.000496 for the three example pairs — AntiDupl shows 0.22 / 0.08 / 0.00 — and 0 / 0 / 0.000253 after the fixes.
 
 ## Workarounds with the current release
 
-1. **Identical-but-0.22:** Options → Advanced → untick *Use libjpeg-turbo* (every JPEG then goes through
-   GDI+, no swap), close AntiDupl, delete `%LOCALAPPDATA%\AntiDupl.NET\user\images\128x128\` (stale cached
-   planes; the "Delete irrelevant records" menu does not remove them), restart, search again. Expected: the
-   example pairs show 0.00 — never green (green currently requires byte-identical files) and still
-   occasionally missing at threshold 0 % (bug 2). Not verified on Windows from here, but both files then
-   use the same decoder.
-2. **View mode:** use **OK**, never Cancel/✕, in the Options dialog; after a Cancel re-select
-   *View → Table of horizontal pairs*.
+1. **Identical-but-0.22:** Options → Advanced → untick *Use libjpeg-turbo* (every JPEG then goes through GDI+, no swap), close AntiDupl, delete `%LOCALAPPDATA%\AntiDupl.NET\user\images\128x128\` (stale cached planes; the "Delete irrelevant records" menu does not remove them), restart, search again. Expected: the example pairs show 0.00 — never green (green currently requires byte-identical files) and still occasionally missing at threshold 0 % (bug 2). Not verified on Windows from here, but both files then use the same decoder.
+2. **View mode:** use **OK**, never Cancel/✕, in the Options dialog; after a Cancel re-select *View → Table of horizontal pairs*.
 
 ## Order of work and upstream PRs
 
-Small, independent PRs against `ermig1979/AntiDupl:master` (active maintainer: Edi61; CI = GitHub Actions
-`windows-latest` MSBuild), then merge them all into the local-build branch:
+Small, independent PRs against `ermig1979/AntiDupl:master` (active maintainer: Edi61; CI = GitHub Actions `windows-latest` MSBuild), then merge them all into the local-build branch:
 
 1. `fix(turbojpeg)`: `TJPF_BGRA` + FILE_VERSION bump/stale-pixel invalidation (#122, #236).
 2. `fix(jpeg)`: every JPEG through TurboJPEG when enabled, GDI+ fallback, EXIF still read.
@@ -66,25 +53,15 @@ Small, independent PRs against `ermig1979/AntiDupl:master` (active maintainer: E
 
 ## Build & verify
 
-Visual Studio with the v143 toolset, ".NET desktop" + "Desktop C++" workloads, .NET 10 SDK, vcpkg integrated
-(`vcpkg integrate install`); open `src/AntiDupl.sln`, build x64 Release. There are no automated tests in the
-repo: each document ends with a manual test list, and `tools/` re-computes the expected numbers.
+Visual Studio with the v143 toolset, ".NET desktop" + "Desktop C++" workloads, .NET 10 SDK, vcpkg integrated (`vcpkg integrate install`); open `src/AntiDupl.sln`, build x64 Release. There are no automated tests in the repo: each document ends with a manual test list, and `tools/` re-computes the expected numbers.
 
-Two practical traps: the C# build events call `.cmd` scripts with unquoted paths, so the solution doesn't
-build from a folder with spaces or commas (task T0); and a dev build uses the same user-data folder as the
-installed release unless started with `-s <folder>` — keep the user's real settings, image DB and mistakes
-list out of reach (FILE_VERSION 5 files can't be read by the release).
+Two practical traps: the C# build events call `.cmd` scripts with unquoted paths, so the solution doesn't build from a folder with spaces or commas (task T0); and a dev build uses the same user-data folder as the installed release unless started with `-s <folder>` — keep the user's real settings, image DB and mistakes list out of reach (FILE_VERSION 5 files can't be read by the release).
 
 ## Tools on the local machine
 
-Claude Code runs commands through its shell, so executables are found via that shell's **PATH** (inherited
-when Claude Code starts — restart it after changing PATH). Python packages are found by the interpreter
-(`import ssimulacra2` works without PATH; pip's `.exe` wrappers live in the Python `Scripts` folder). Nothing
-else is searched automatically, so either put tools on PATH or write their locations into the repo's
-[`CLAUDE.md`](../CLAUDE.md), which local sessions read at start. Recommended native metric tools:
+Claude Code runs commands through its shell, so executables are found via that shell's **PATH** (inherited when Claude Code starts — restart it after changing PATH). Python packages are found by the interpreter (`import ssimulacra2` works without PATH; pip's `.exe` wrappers live in the Python `Scripts` folder). Nothing else is searched automatically, so either put tools on PATH or write their locations into the repo's [`CLAUDE.md`](../CLAUDE.md), which local sessions read at start. Recommended native metric tools:
 
-* `ssimulacra2.exe`, `butteraugli_main.exe` — libjxl reference builds, in `jxl-x64-windows-static.zip`
-  (`bin\`) from the libjxl GitHub releases (v0.12.0 checked).
+* `ssimulacra2.exe`, `butteraugli_main.exe` — libjxl reference builds, in `jxl-x64-windows-static.zip` (`bin\`) from the libjxl GitHub releases (v0.12.0 checked).
 * `exiftool.exe` (for [05](05-metadata-merge.md)).
 * `tools/metric_experiment.py --tool-dir <folder>` (or `ANTIDUPL_TOOL_DIRS`) also finds tools off PATH.
 

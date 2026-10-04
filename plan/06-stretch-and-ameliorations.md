@@ -7,21 +7,15 @@ User's requirements, verbatim in substance:
 * Run a QuantSmooth (QS) pass on JPEGs **before comparison**, writing the QS outputs to a **temporary folder**.
 * All image operations (delete / replace / rename / move) still act on the **originals**.
 * All details shown (size, type, dates, EXIF, path …) are those of the **originals**.
-* When a decision is made about a pair (delete/replace 1 or 2, or keep both = "mistake"), the temporary QS
-  versions of **those** images are deleted.
+* When a decision is made about a pair (delete/replace 1 or 2, or keep both = "mistake"), the temporary QS versions of **those** images are deleted.
 * QS images that are **not currently open in the program** and **older than a week** are deleted.
 
 Pointers for whoever picks this up (from reading the code, not researched further):
 
-* Comparison input comes from `TDataCollector::FillPixelData` ([adDataCollector.cpp:70](../src/AntiDupl/adDataCollector.cpp#L70));
-  feeding it the QS output keeps everything else (paths, sizes, CRC, EXIF) on the original. Keep pixel
-  identity ([01 § E](01-difference-correctness.md)) on the **original** pixels.
-* Cache: the image DB stores reduced data per path+size+mtime; QS-derived data needs its own cache
-  directory (e.g. `images\128x128_qs`) or a flag in the record, otherwise toggling QS mixes data.
-* Preview / Ctrl+D external diff: decide whether they show QS or original (user's current "QS Compare" script
-  suggests QS for the diff tool).
-* Decision hooks: the action dispatch in `ResultsListView.MakeAction` / `ProgressForm` (delete, rename,
-  mistake); age-based cleanup at start-up and after each search.
+* Comparison input comes from `TDataCollector::FillPixelData` ([adDataCollector.cpp:70](../src/AntiDupl/adDataCollector.cpp#L70)); feeding it the QS output keeps everything else (paths, sizes, CRC, EXIF) on the original. Keep pixel identity ([01 § E](01-difference-correctness.md)) on the **original** pixels.
+* Cache: the image DB stores reduced data per path+size+mtime; QS-derived data needs its own cache directory (e.g. `images\128x128_qs`) or a flag in the record, otherwise toggling QS mixes data.
+* Preview / Ctrl+D external diff: decide whether they show QS or original (user's current "QS Compare" script suggests QS for the diff tool).
+* Decision hooks: the action dispatch in `ResultsListView.MakeAction` / `ProgressForm` (delete, rename, mistake); age-based cleanup at start-up and after each search.
 * The user's existing tool: `…\hidpi-manga\tools\sendto\QS Compare (no menu).cmd`.
 
 ## S2 — Comparison-engine research *(done — see [02-comparison-modes.md](02-comparison-modes.md))*
