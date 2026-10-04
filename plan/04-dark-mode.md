@@ -15,7 +15,7 @@ The WinForms app targets `net10.0-windows7.0` ([AntiDupl.NET.WinForms.csproj](..
 ## Steps
 
 1. **Setting.** Add `public SystemColorMode ColorMode = SystemColorMode.System;` (or own enum) to [Options.cs](../src/AntiDupl.NET.WinForms/Options.cs) — copy ctor, `CopyTo`, `Equals` too — and a *View → Theme → System / Light / Dark* menu (radio items like `ViewModeMenuItem`). Changing it shows "restart to apply".
-2. **Apply early.** Today `MainForm` loads the options itself ([MainForm.cs:57](../src/AntiDupl.NET.WinForms/Form/MainForm.cs#L57)). Load them in [Program.cs](../src/AntiDupl.NET.WinForms/Program.cs#L53) instead: `var options = Options.Load(); Application.SetColorMode(options.ColorMode); Application.Run(new MainForm(options));`
+2. **Apply early.** Today `MainForm` loads the options itself ([MainForm.cs:57](../src/AntiDupl.NET.WinForms/Form/MainForm.cs#L57)). Load them in [Program.cs](../src/AntiDupl.NET.WinForms/Program.cs#L55) instead: `var options = Options.Load(); Application.SetColorMode(options.ColorMode); Application.Run(new MainForm(options));`
 3. **Theme helper.** `static class ThemeColors` returning light/dark values based on `Application.IsDarkModeEnabled`, and replace the hard-coded colours:
 
    | Where | Today | Use |

@@ -1,6 +1,8 @@
 # 06 — Stretch goals (noted, not researched) and other improvements
 
-## S1 — Built-in QuantSmooth pass before comparing JPEGs *(user's spec — not started)*
+Numbering follows `tasks.md`; S1 (metadata merge) has its own document, [05](05-metadata-merge.md).
+
+## S2 — Built-in QuantSmooth pass before comparing JPEGs *(user's spec — not started)*
 
 User's requirements, verbatim in substance:
 
@@ -18,9 +20,9 @@ Pointers for whoever picks this up (from reading the code, not researched furthe
 * Decision hooks: the action dispatch in `ResultsListView.MakeAction` / `ProgressForm` (delete, rename, mistake); age-based cleanup at start-up and after each search.
 * The user's existing tool: `…\hidpi-manga\tools\sendto\QS Compare (no menu).cmd`.
 
-## S2 — Comparison-engine research *(done — see [02-comparison-modes.md](02-comparison-modes.md))*
+## S3 — Comparison-engine research *(done — see [02-comparison-modes.md](02-comparison-modes.md))*
 
-## S3 — Other improvements found while reading the code
+## S4 — Other improvements found while reading the code
 
 | # | Item | Where | Why |
 |---|---|---|---|

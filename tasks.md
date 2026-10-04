@@ -1,6 +1,6 @@
 # Tasks — AntiDupl local build
 
-Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every task links to its section. Priorities: **P0** proven bugs (upstream-worthy), **P1** requested features, **P2** stretch goals. Each P0/P1 item should be its own commit (and, where marked ⬆, its own upstream PR branch off `master`).
+Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every task links to its section. Priorities: **P0** proven bugs (upstream-worthy), **P1** requested features, **P2** stretch goals. Each P0/P1 item should be its own commit (and, where marked ⬆, its own upstream PR branch off `upstream/master`).
 
 ## P0 — Bugs (root causes proven)
 
@@ -9,8 +9,8 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
 - [ ] **T2 ⬆ JPEG decoder chosen by the 4th byte.** `TTurboJpeg::Supported` accepts any `FF D8 FF`; GDI+ fallback when TurboJPEG fails; keep EXIF for JPEGs (`TGdiplus::LoadExif`). → [01 § B](plan/01-difference-correctness.md)
 - [ ] **T3 ⬆ Stale image database.** `FILE_VERSION` 4 → 5, discard pixel data/blockiness/blurring of older records. Bundle every per-image format change (T4, T8, T10) into this one bump for the local build. → [01 § C](plan/01-difference-correctness.md)
 - [ ] **T4 ⬆ Float noise in SSIM** (identical planes → 7.6e-6 in ~30 % of cases; not green, dropped at 0 %; upstream #186). Exact `sum`/`sumSquare`, double math, `memcmp` shortcut, `/fp:precise`. → [01 § D](plan/01-difference-correctness.md)
-- [ ] **T5 ⬆ View mode resets / stacked two-value cells.** Options → Cancel replaces `resultsOptions` (`CoreOptionsForm.cs:879`); full `ResultsOptions` copy ctor; restore-in-place on Cancel/✕; row setter uses the grid's actual mode; `Options.Load` keeps a `.bad` copy instead of silently resetting. → [03 § H](plan/03-ui-bugs.md)
-- [ ] **T6 ⬆ Janky sorting.** No left/right swap for non-`BySorted*` types (and only strict swaps for them); total-order tie-breaks + `stable_sort`; natural (`StrCmpLogicalW`) order for display sorts. → [03 § I](plan/03-ui-bugs.md)
+- [ ] **T5 ⬆ View mode resets / stacked two-value cells.** Options → Cancel replaces `resultsOptions` (`CoreOptionsForm.cs:879`); full `ResultsOptions` copy ctor; restore-in-place on Cancel/✕; row setter uses the grid's actual mode; `Options.Load` keeps a `.bad` copy instead of silently resetting (upstream #242). → [03 § H](plan/03-ui-bugs.md)
+- [ ] **T6 ⬆ Janky sorting.** No left/right swap for non-`BySorted*` types (and only strict swaps for them); total-order tie-breaks + `stable_sort`; natural (`StrCmpLogicalW`) order for display sorts (upstream #241). → [03 § I](plan/03-ui-bugs.md)
 
 ## P1 — Requested features
 
@@ -29,12 +29,12 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
 - [ ] **S2 Built-in QuantSmooth pass** — user's specification, verbatim:
       > Built-in QuantSmooth pass before comparison of jpgs creating a temporary folder of QS outputs. All image operations should still affect the originals. All details/info should be that of the originals. When a decision is made about an image pair (delete/replace 1/2 or keep both) the temporary versions of those images should be deleted. QSed images that are not currently open in the program, and are more than a week old should be deleted.
 
-      Code pointers only (not researched) → [06 § S1](plan/06-stretch-and-ameliorations.md)
+      Code pointers only (not researched) → [06 § S2](plan/06-stretch-and-ameliorations.md)
 - [x] **S3 Research better comparison engines for my purposes** — done: Butteraugli best, cheap colour block metric second; hashes/DSSIM/SSIM variants unsuitable; size study. → [02](plan/02-comparison-modes.md)
-- [ ] **S4 Other ameliorations** found while reading the code (HEIF-with-alpha bug, JPEG-quality and bits-per-pixel columns, hint policy for identical pairs, EXIF orientation, crop-tolerant alignment, colour-aware difference highlighting, explicit identity flags, tooltip) → [06 § S3](plan/06-stretch-and-ameliorations.md)
+- [ ] **S4 Other ameliorations** found while reading the code (HEIF-with-alpha bug, JPEG-quality and bits-per-pixel columns, hint policy for identical pairs, EXIF orientation, crop-tolerant alignment, colour-aware difference highlighting, explicit identity flags, tooltip) → [06 § S4](plan/06-stretch-and-ameliorations.md)
 
 ## Notes for the implementing session
 
-* The C++ core can't be built or run outside Windows/MSVC; nothing here was compiled against the real project. Code in the plan is a sketch — verify each change in the app.
+* Code in the plan is a sketch written without a compiler (the C++ core builds only on Windows/MSVC) — verify each change in the app.
 * There are no automated tests; each plan document ends with a manual test list.
-* Image DB location: `%LOCALAPPDATA%\AntiDupl.NET\user\images\128x128\` — expect a one-time full re-scan after T3.
+* Image DB: `<user folder>\images\128x128\` (release: `%LOCALAPPDATA%\AntiDupl.NET\user`, dev builds: the `-s` folder) — expect a one-time full re-scan after T3.

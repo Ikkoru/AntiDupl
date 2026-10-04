@@ -1,10 +1,10 @@
 # AntiDupl local build — research results and implementation plan
 
-Hand-off for a local Claude Code session (Windows 11, Visual Studio + vcpkg) working on the fork `Ikkoru/AntiDupl` (base: upstream `ermig1979/AntiDupl` `e06d082`, v2.3.13). The checklist is in [`../tasks.md`](../tasks.md); this folder holds the evidence and the designs.
+Hand-off for a local Claude Code session (Windows 11, MSVC + vcpkg) working on the fork `Ikkoru/AntiDupl` (base: upstream `ermig1979/AntiDupl` `e06d082`, v2.3.13). The checklist is in [`../tasks.md`](../tasks.md); this folder holds the evidence and the designs.
 
 ## The user's setup (from `options.xml` / `default.xml`)
 
-*Table of horizontal pairs*, algorithm **SSIM**, threshold **1 %**, sorted by **Difference ascending**, reduced image size 128, *use database of image* on, *use libjpeg-turbo* on, compare inside one search path, 3 artist folders per scan. Hot keys: NumPad1/NumPad2 delete first/second, NumPad5 mistake, Ctrl+D external diff ("QS Compare" script). Goal: delete the worse-compressed copy, keep similar-but-distinct images.
+*Table of horizontal pairs*, algorithm **SSIM**, threshold **1 %**, sorted by **Difference ascending**, reduced image size 128, *use database of image* on, *use libjpeg-turbo* on in the copied profile (the live profile has it off and its image DB emptied — workaround 1 below), compare inside one search path, 3 artist folders per scan. Hot keys: NumPad1/NumPad2 delete first/second, NumPad5 mistake, Ctrl+D external diff ("QS Compare" script). Goal: delete the worse-compressed copy, keep similar-but-distinct images.
 
 ## Decisions taken with the user
 
@@ -24,8 +24,8 @@ Hand-off for a local Claude Code session (Windows 11, Visual Studio + vcpkg) wor
 | 2 | Identical images missing at threshold 0 %, not green | float32/`/fp:fast` SSIM gives 7.6e-6 for identical planes ~30 % of the time | [01 § D](01-difference-correctness.md) | fixes [#186](https://github.com/ermig1979/AntiDupl/issues/186) |
 | 3 | `0.00` shown for images that differ | 2-decimal rounding + tiny real differences; no pixel-identity concept | [01 § E–F](01-difference-correctness.md) | — |
 | 4 | Variants vs worse copies not separated | one global grayscale SSIM on 128 px; colour-blind, insensitive to local edits | [02](02-comparison-modes.md) | — |
-| 5 | Horizontal/vertical mode resets; stacked two-value cells | Options → **Cancel** replaces `resultsOptions` with a clone that lacks the view mode and all event subscribers | [03 § H](03-ui-bugs.md) | — |
-| 6 | Janky sorting, history-dependent | every pair left/right-swapped on most sorts; unstable `std::sort` without tie-breakers; no natural order | [03 § I](03-ui-bugs.md) | — |
+| 5 | Horizontal/vertical mode resets; stacked two-value cells | Options → **Cancel** replaces `resultsOptions` with a clone that lacks the view mode and all event subscribers | [03 § H](03-ui-bugs.md) | reported: [#242](https://github.com/ermig1979/AntiDupl/issues/242) |
+| 6 | Janky sorting, history-dependent | every pair left/right-swapped on most sorts; unstable `std::sort` without tie-breakers; no natural order | [03 § I](03-ui-bugs.md) | reported: [#241](https://github.com/ermig1979/AntiDupl/issues/241) |
 | 7 | No dark mode | — | [04](04-dark-mode.md) | [#115](https://github.com/ermig1979/AntiDupl/issues/115) |
 | 8 | (stretch) keep metadata of the deleted copy | — | [05](05-metadata-merge.md) | — |
 | 9 | (stretch) QuantSmooth pre-pass, other improvements | — | [06](06-stretch-and-ameliorations.md) | — |
@@ -57,13 +57,11 @@ Visual Studio with the v143 toolset, ".NET desktop" + "Desktop C++" workloads, .
 
 Two practical traps: the C# build events call `.cmd` scripts with unquoted paths, so the solution doesn't build from a folder with spaces or commas (task T0); and a dev build uses the same user-data folder as the installed release unless started with `-s <folder>` — keep the user's real settings, image DB and mistakes list out of reach (FILE_VERSION 5 files can't be read by the release).
 
-## Tools on the local machine
+## Tools
 
-Claude Code runs commands through its shell, so executables are found via that shell's **PATH** (inherited when Claude Code starts — restart it after changing PATH). Python packages are found by the interpreter (`import ssimulacra2` works without PATH; pip's `.exe` wrappers live in the Python `Scripts` folder). Nothing else is searched automatically, so either put tools on PATH or write their locations into the repo's [`CLAUDE.md`](../CLAUDE.md), which local sessions read at start. Recommended native metric tools:
-
-* `ssimulacra2.exe`, `butteraugli_main.exe` — libjxl reference builds, in `jxl-x64-windows-static.zip` (`bin\`) from the libjxl GitHub releases (v0.12.0 checked).
-* `exiftool.exe` (for [05](05-metadata-merge.md)).
-* `tools/metric_experiment.py --tool-dir <folder>` (or `ANTIDUPL_TOOL_DIRS`) also finds tools off PATH.
+* `ssimulacra2.exe`, `butteraugli_main.exe` — libjxl reference builds, in `jxl-x64-windows-static.zip` (`bin\`) from the libjxl GitHub releases (v0.12.0 checked). They need not be on PATH: `tools/metric_experiment.py --tool-dir <folder>` (or `ANTIDUPL_TOOL_DIRS`) finds them.
+* `exiftool.exe` (for [05](05-metadata-merge.md)); `jpegtran` (libjpeg-turbo tools, for the lossless re-save tests in [01](01-difference-correctness.md)).
+* Where they are on the user's PC: `Tools\README.txt` in the workspace folder around the clone.
 
 ## Files
 

@@ -36,7 +36,7 @@ The error is bigger for the bluer image (0.22) than the greyer one (0.08), as ex
 
 ## Bug B — decoder chosen by the 4th byte of the file
 
-Even with Bug A fixed, a pixel-identical pair can still be decoded by two different libraries (libjpeg-turbo vs GDI+'s IJG-derived codec), which is the wrong kind of variability for a duplicate finder, and TurboJPEG failures have **no fallback** ([adImage.cpp:112-118](../src/AntiDupl/adImage.cpp#L112) returns whatever `TTurboJpeg::Load` returns, including `NULL`).
+Even with Bug A fixed, a pixel-identical pair can still be decoded by two different libraries (libjpeg-turbo vs GDI+'s IJG-derived codec), which is the wrong kind of variability for a duplicate finder, and TurboJPEG failures have **no fallback** ([adImage.cpp:113-118](../src/AntiDupl/adImage.cpp#L113) returns whatever `TTurboJpeg::Load` returns, including `NULL`).
 
 **Fix:**
 

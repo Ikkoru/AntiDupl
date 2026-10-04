@@ -87,7 +87,7 @@ Switching between Mean square / SSIM / Local colour therefore never decodes agai
 
 * `enum adAlgorithmComparing` ([AntiDupl.h:385](../src/AntiDupl/AntiDupl.h#L385)): add `AD_COMPARING_LOCAL_COLOR = 2`, `AD_COMPARING_BUTTERAUGLI = 3` before `AD_COMPARING_SIZE` — no struct layout change; range check in [adOptions.cpp:109](../src/AntiDupl/adOptions.cpp#L109) follows automatically.
 * `CreateImageComparer` ([adImageComparer.cpp:421](../src/AntiDupl/adImageComparer.cpp#L421)) returns the new comparers; all of them use the identity rule of [01 § E](01-difference-correctness.md).
-* C#: [AlgorithmComparing.cs](../src/AntiDupl.NET.Core/Enums/AlgorithmComparing.cs), the combo boxes in [CoreOptionsForm.cs:233-245](../src/AntiDupl.NET.WinForms/Form/CoreOptionsForm.cs#L233) and `MainToolStrip`, per-mode threshold ranges/defaults (`THRESHOLD_DIFFERENCE_*`), strings (English/Russian).
+* C#: [AlgorithmComparing.cs](../src/AntiDupl.NET.Core/Enums/AlgorithmComparing.cs), the combo boxes in [CoreOptionsForm.cs:234-246](../src/AntiDupl.NET.WinForms/Form/CoreOptionsForm.cs#L234) and `MainToolStrip`, per-mode threshold ranges/defaults (`THRESHOLD_DIFFERENCE_*`), strings (English/Russian).
 * Optional (makes switching instant without re-searching): store every cheap metric per result (`double ssim, colour, butteraugli`) and show them as extra sortable columns — needs an `adResult` ABI/`.adr` format change.
 
 ## Calibrate on real data
