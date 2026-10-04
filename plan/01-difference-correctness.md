@@ -30,6 +30,8 @@ if (::tjDecompress2(_handle, data, size, pView->data, width, 0, height, ::TJPF_R
 
 The error is bigger for the bluer image (0.22) than the greyer one (0.08), as expected from an R↔B swap.
 
+Confirmed with the unmodified upstream build on Windows: the user's settings (reduced image size 128) show 0.22 / 0.08 / 0.00; AntiDupl's defaults (reduced image size 32) show 0.18 / 0.07 / 0.00, which `tools/repro_difference.py --size 32` reproduces (0.179443 / 0.067162 / 0.000397).
+
 **Same bug, other symptoms (upstream):** everything that displays through the core loader (`adLoadBitmapW` → `Simd::Resize` of the mislabelled view, [adImageUtils.cpp:78](../src/AntiDupl/adImageUtils.cpp#L78)) shows JFIF JPEGs with red/blue swapped — the big preview for paths ≥ 260 chars ([PictureBoxPanel.cs:122](../src/AntiDupl.NET.WinForms/GUIControl/PictureBoxPanel.cs#L122) only uses GDI+ for short paths) and the grouped-thumbnails view (`ThumbnailStorage`; its menu entry is currently commented out in `ViewModeMenuItem.cs`): [ermig1979/AntiDupl#122](https://github.com/ermig1979/AntiDupl/issues/122) ("reddish tint"), [ermig1979/AntiDupl#236](https://github.com/ermig1979/AntiDupl/issues/236) ("long path names cause colour distortion"). The user never sees it because the pair preview uses .NET/GDI+ for normal paths. Also affects blockiness/blurring values of JFIF JPEGs (computed from the same gray image).
 
 **Fix (1 line):** `::TJPF_RGBA` → `::TJPF_BGRA`. Must ship together with Bug C (cache invalidation).

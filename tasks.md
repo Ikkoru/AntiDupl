@@ -32,7 +32,7 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
       Code pointers only (not researched) → [06 § S2](plan/06-stretch-and-ameliorations.md)
 - [x] **S3 Research better comparison engines for my purposes** — done: Butteraugli best, cheap colour block metric second; hashes/DSSIM/SSIM variants unsuitable; size study. → [02](plan/02-comparison-modes.md)
 - [ ] **S4 Other ameliorations** found while reading the code (HEIF-with-alpha bug, JPEG-quality and bits-per-pixel columns, hint policy for identical pairs, EXIF orientation, crop-tolerant alignment, colour-aware difference highlighting, explicit identity flags, tooltip, `/utf-8` for the C++ sources, v145 miscompiling libde265) → [06 § S4](plan/06-stretch-and-ameliorations.md)
-- [ ] **S5 Mistakes list:** verify *Remember mistakes* works as a search filter; clearer labels for it and for *Check the database of mistakes at loading*; a quick toggle; never discard entries on an offline drive; match files by content instead of path + size + date. → [06 § S5](plan/06-stretch-and-ameliorations.md)
+- [ ] **S5 Mistakes list:** verify *Remember mistakes* works as a search filter; clearer labels for it and for *Check the database of mistakes at loading*; a quick toggle; never discard entries on an offline drive; crash-safe saving of all core files; path + content identity (lost entries kept and re-linked when found again) with a compact image/pair storage or SQLite. → [06 § S5](plan/06-stretch-and-ameliorations.md)
 
 ## Notes for the implementing session
 

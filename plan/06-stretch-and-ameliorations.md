@@ -53,4 +53,17 @@ Stretch items:
 * **Clearer labels:** *Remember mistakes* → e.g. "Hide pairs marked as mistakes in searches"; *Check the database of mistakes at loading* → e.g. "At start-up, forget mistakes whose files moved or changed".
 * **Quick toggle** for that filter in the Search menu / toolbar.
 * **Offline-drive guard:** the start-up check skips entries on a drive or share that isn't available instead of discarding them.
-* **Path-independent matching:** identify files by content — the pixel hash of T8, or a file hash — so moving, renaming or retagging keeps the mistakes; fill the hash for existing entries the first time their files are seen.
+* **Path-independent matching** and **better storage** — design ideas below.
+* **Crash-safe saving** (small, upstreamable, for every core file — options, results, image DB, mistakes): each save opens the target with `CREATE_ALWAYS` and rewrites it in place ([adFileStream.cpp](../src/AntiDupl/adFileStream.cpp) `TOutputFileStream`), so a crash or power cut during the save at exit leaves a truncated file, the next start can't read it, and the empty list is then saved over it. Write `<name>.tmp`, then `MoveFileEx(…, MOVEFILE_REPLACE_EXISTING)`; keep the previous file as `<name>.bak`.
+
+### Design ideas: path + content identity, compact storage
+
+Today's costs (version 4 file): about **730 bytes per pair**. Each pair stores two complete image records — the path as UTF-16 (the bulk of it), 48 bytes of size/date/path CRC/type/dimensions/blockiness/blurring, and the EXIF strings — and an image that appears in several pairs is stored again for each. Only path, size and date are used for matching. In memory every record is its own heap `TImageInfo` in a `std::multiset` ordered by path, so each lookup costs O(log n) path-string comparisons; the search does one lookup per pair it finds.
+
+Proposal (the user's idea: path for speed, a second reference so renames and moves don't break the list):
+
+* **Image table + pair table.** Each image once: id, path, size, date, content key, state (`present` / `lost`), last seen. A pair is two image ids (smaller first), a single one id. A pair then costs 8 bytes, plus each image once.
+* **Path first, content second.** A path → id hash map answers almost every lookup. Only when a scanned file's path is unknown, or its size/date changed, look up its content key; on a hit, update the stored path ("re-link"). Content key: the pixel hash of T8 (XXH3-64 of the decoded pixels; unchanged by retagging, metadata edits and lossless re-saves; the image DB will hold it, so no extra decoding), optionally plus a file hash for non-decodable files.
+* **Lost, not deleted.** The start-up check marks entries whose files are missing as `lost` instead of discarding them; a later scan re-links them when their content key turns up. Purging lost entries is a separate command or an age limit the user sets.
+* **O(1) lookups:** a hash set of id pairs instead of the path-ordered multiset.
+* **File format:** either a compact own binary file (string table + fixed-size records, saved crash-safe as above), or SQLite (vcpkg `sqlite3`): indexed lookups by path and by content key, incremental updates instead of a full rewrite at exit, and transactions. SQLite makes the lost/re-link queries and later columns easy; the own format needs no new dependency. Either way the current `.adm` is read once to migrate; entries get their content key the first time their files are scanned.
