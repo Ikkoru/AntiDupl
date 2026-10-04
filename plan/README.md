@@ -34,7 +34,7 @@ Reproduction (any OS with Python): `tools/repro_difference.py` prints 0.217453 /
 
 ## Workarounds with the current release
 
-1. **Identical-but-0.22:** Options → Advanced → untick *Use libjpeg-turbo* (every JPEG then goes through GDI+, no swap), close AntiDupl, delete `%LOCALAPPDATA%\AntiDupl.NET\user\images\128x128\` (stale cached planes; the "Delete irrelevant records" menu does not remove them), restart, search again. Expected: the example pairs show 0.00 — never green (green currently requires byte-identical files) and still occasionally missing at threshold 0 % (bug 2). Not verified on Windows from here, but both files then use the same decoder.
+1. **Identical-but-0.22:** Options → Advanced → untick *Use libjpeg-turbo* (every JPEG then goes through GDI+, no swap), close AntiDupl, delete `%LOCALAPPDATA%\AntiDupl.NET\user\images\128x128\` (stale cached planes; the "Delete irrelevant records" menu does not remove them), restart, search again. Expected: the example pairs show 0.00 — never green (green currently requires byte-identical files) and still occasionally missing at threshold 0 % (bug 2). Confirmed on the user's PC: all example pairs show 0.00.
 2. **View mode:** use **OK**, never Cancel/✕, in the Options dialog; after a Cancel re-select *View → Table of horizontal pairs*.
 
 ## Order of work and upstream PRs
@@ -53,7 +53,7 @@ Small, independent PRs against `ermig1979/AntiDupl:master` (active maintainer: E
 
 ## Build & verify
 
-Visual Studio or its Build Tools with the ".NET desktop" + "Desktop C++" workloads, the v143 toolset (or another passed as `-p:PlatformToolset=…`, as on the user's PC), .NET 10 SDK, vcpkg integrated (`vcpkg integrate install`); build `src/AntiDupl.sln` x64 Release. There are no automated tests in the repo: each document ends with a manual test list, and `tools/` re-computes the expected numbers.
+Visual Studio or its Build Tools with the ".NET desktop" + "Desktop C++" workloads, the v143 toolset, .NET 10 SDK, vcpkg integrated (`vcpkg integrate install`); build `src/AntiDupl.sln` x64 Release. Build the vcpkg libraries with v143 as well: MSVC 14.51 (v145, Visual Studio 2026's default) miscompiles libde265 1.0.16 so that `AntiDupl.dll` fails to load ([06](06-stretch-and-ameliorations.md) A12). There are no automated tests in the repo: each document ends with a manual test list, and `tools/` re-computes the expected numbers.
 
 Two practical traps: the C# build events call `.cmd` scripts with unquoted paths, so the solution doesn't build from a folder with spaces or commas (task T0); and a dev build uses the same user-data folder as the installed release unless started with `-s <folder>` — keep the user's real settings, image DB and mistakes list out of reach (FILE_VERSION 5 files can't be read by the release).
 

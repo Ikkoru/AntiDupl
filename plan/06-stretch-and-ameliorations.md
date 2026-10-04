@@ -37,3 +37,20 @@ Pointers for whoever picks this up (from reading the code, not researched furthe
 | A9 | `/fp:fast` for the whole core | [Prop.props:39](../src/Prop.props#L39) | covered in [01](01-difference-correctness.md) |
 | A10 | Tooltip on the Difference cell with the full-precision value | ResultRowSetter | sorting is exact, display isn't |
 | A11 | Compile with `/utf-8`: the C++ sources are UTF-8, most without BOM, so MSVC reads them in the ANSI code page (warning C4819). On a CJK-locale PC a comment ending in Cyrillic/CJK text then swallows its line end — harmless with a CRLF checkout, but with LF line ends the next line of code joins the comment | [Prop.props](../src/Prop.props) `AdditionalOptions` | upstreamable; the user's PC (cp932) builds with `CL=/utf-8` meanwhile |
+| A12 | vcpkg libraries built with MSVC 14.51 (v145): libde265 1.0.16's `de265_init()` runs off the start of a scan table in `init_scan_orders()`; libheif calls it from a static constructor, so `AntiDupl.dll` fails to load (error 1114) and the program closes silently. The same source and flags built with MSVC 14.44 (v143) work; `scan.cc` compiled on its own works with both, so the trigger lies elsewhere in the library | [AntiDupl_CI.yml](../.github/workflows/AntiDupl_CI.yml), vcpkg triplet | upstream's CI breaks once `windows-latest` builds with Visual Studio 2026; pin `VCPKG_PLATFORM_TOOLSET v143`, and report it (Microsoft / libde265) with a minimal repro |
+
+## S5 — Mistakes list
+
+How it works today:
+
+* An entry identifies a file by **path + file size + modification time** ([adImageInfo.cpp:117](../src/AntiDupl/adImageInfo.cpp#L117), lookups in [adMistakeStorage.cpp](../src/AntiDupl/adMistakeStorage.cpp)); the stored "hash" is a CRC of the path, not of the content. A rename done inside AntiDupl carries the entries along (`TMistakeStorage::Rename`, line 177); moving, renaming or editing a file anywhere else (retagging changes size and date) makes its entries stop matching.
+* *Remember mistakes* (Options → Advanced, `mistakeDataBase`) only decides whether a **search** drops pairs found in the list ([adResultStorage.cpp:91](../src/AntiDupl/adResultStorage.cpp#L91), 121). Marking a pair as a mistake records it either way ([adUndoRedoEngine.cpp:416-423](../src/AntiDupl/adUndoRedoEngine.cpp#L416)). Switching it doesn't refilter the current results.
+* *Search → Check the database of mistakes at loading* (`checkMistakesAtLoading`) discards, at start-up, every entry whose file is missing or changed ([adMistakeStorage.cpp:88, 99](../src/AntiDupl/adMistakeStorage.cpp#L88)); the list is saved without them on exit, so they are gone for good. Starting AntiDupl while a drive (the user's `Z:`) is offline wipes every entry on it.
+
+Stretch items:
+
+* **Verify** *Remember mistakes* as a search filter (the user remembers it not working once): off → a new search shows marked pairs; on → it hides them; check whether it ever needs a new search or a restart.
+* **Clearer labels:** *Remember mistakes* → e.g. "Hide pairs marked as mistakes in searches"; *Check the database of mistakes at loading* → e.g. "At start-up, forget mistakes whose files moved or changed".
+* **Quick toggle** for that filter in the Search menu / toolbar.
+* **Offline-drive guard:** the start-up check skips entries on a drive or share that isn't available instead of discarding them.
+* **Path-independent matching:** identify files by content — the pixel hash of T8, or a file hash — so moving, renaming or retagging keeps the mistakes; fill the hash for existing entries the first time their files are seen.
