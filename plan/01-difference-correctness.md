@@ -59,6 +59,8 @@ bool supported = (size >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 
 
 **Watch out — EXIF.** Only the GDI+ path fills `TImage::m_exifInfo` ([adGdiplus.cpp:254](../src/AntiDupl/adGdiplus.cpp#L254)); TurboJPEG/WebP/AVIF/JXL/HEIF never do. Routing all JPEGs to TurboJPEG would silently blank the EXIF fields the UI shows for JPEGs. Add `bool TGdiplus::LoadExif(HGLOBAL, TImageExif*)` (factor `GetExifProperty` out; GDI+ parses metadata without decoding pixels until `LockBits`/`DrawImage`) and call it from `TTurboJpeg::Load`. Measure the cost; if noticeable, parse APP1 directly (only 7 tags are used: ImageDescription, Make, Model, Software, DateTime, Artist, UserComment).
 
+**As implemented** (`fix/jpeg-routing`): as above. Reading the properties through GDI+ cost no measurable time (single decoding thread, JFIF files with and without it). The routing also mattered for EXIF before: a JFIF file with an EXIF segment after it went to TurboJPEG and showed no EXIF. Tests: [`tools/make_jpeg_cases.sh`](tools/make_jpeg_cases.sh).
+
 ## Bug C — stale image database after A/B
 
 The `.adi` cache stores the 128×128 planes keyed by path + size + mtime. After A/B, cached planes of every JFIF JPEG are wrong (swapped) while newly computed ones are right — mixing them is worse than either. "Delete irrelevant records from a database of image" only drops records of missing files, so it doesn't help.
