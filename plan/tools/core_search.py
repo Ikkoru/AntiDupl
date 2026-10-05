@@ -3,6 +3,7 @@
 Usage:
     python core_search.py DLL_DIR USER_DIR SEARCH_DIR [--size N] [--threshold N]
                           [--turbo 0|1] [--algorithm 0|1] [--runs N] [--use-db]
+                          [--details] [--collect-threads N]
 
 DLL_DIR     folder holding AntiDupl.dll (e.g. bin\\Release of a build)
 USER_DIR    the engine's user folder (settings, image database); created if
@@ -17,6 +18,10 @@ SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
 --use-db    like the GUI's "use database of image": load the image database
             from USER_DIR\\images\\<size>x<size> before each search and save it
             after, so a later run (another build, too) starts from the cache
+--details   also print the search time, the defect results (files that did
+            not decode are AD_DEFECT_UNKNOWN), and for every image in a result
+            its type, size and non-empty EXIF fields
+--collect-threads  number of threads that decode images (timing)
 
 Prints one line per pair: difference with full precision, the 2-decimal value
 the UI shows, and the two file names. Output is ASCII-only.
@@ -25,6 +30,7 @@ import argparse
 import ctypes
 import os
 import sys
+import time
 
 MAX_PATH_EX = 32768
 MAX_EXIF_SIZE = 260
@@ -32,7 +38,10 @@ AD_OPTIONS_COMPARE, AD_OPTIONS_ADVANCED = 1, 3
 AD_PATH_SEARCH = 0
 AD_FILE_IMAGE_DATA_BASE = 3
 AD_SORT_BY_DIFFERENCE = 38
-AD_RESULT_DUPL_IMAGE_PAIR = 2
+AD_RESULT_DEFECT_IMAGE, AD_RESULT_DUPL_IMAGE_PAIR = 1, 2
+IMAGE_TYPES = ["NONE", "BMP", "GIF", "JPEG", "PNG", "TIFF", "EMF", "WMF", "EXIF", "ICON", "JP2", "PSD",
+               "DDS", "TGA", "WEBP", "HEIF", "AVIF", "JXL"]
+DEFECTS = ["NONE", "UNKNOWN", "JPEG_END_MARKER_IS_ABSENT", "BLOCKINESS", "BLURRING"]
 
 
 class CompareOptions(ctypes.Structure):
@@ -75,6 +84,13 @@ def ascii(s):
     return s.encode("ascii", "replace").decode()
 
 
+def describe(info):
+    kind = IMAGE_TYPES[info.type] if 0 <= info.type < len(IMAGE_TYPES) else str(info.type)
+    exif = [f"{n}={ascii(getattr(info.exifInfo, n))!r}" for n, _ in ExifInfoW._fields_[1:]
+            if getattr(info.exifInfo, n)]
+    return f"{ascii(os.path.basename(info.path))}: {kind} {info.width}x{info.height} exif: {' '.join(exif) or '-'}"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dll_dir")
@@ -86,6 +102,8 @@ def main():
     ap.add_argument("--algorithm", type=int, default=1)
     ap.add_argument("--runs", type=int, default=1)
     ap.add_argument("--use-db", action="store_true")
+    ap.add_argument("--details", action="store_true")
+    ap.add_argument("--collect-threads", type=int)
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -125,6 +143,8 @@ def main():
         adv.reducedImageSize = a.size
         adv.useLibJpegTurbo = a.turbo
         adv.mistakeDataBase = 0
+        if a.collect_threads is not None:
+            adv.collectThreadCount = a.collect_threads
         assert core.adOptionsSet(h, AD_OPTIONS_ADVANCED, ctypes.byref(adv)) == 0
 
         buf = (ctypes.c_wchar * (MAX_PATH_EX + 1))()
@@ -137,25 +157,39 @@ def main():
             if a.use_db:                                # same order as SearchExecuterForm
                 os.makedirs(db_dir, exist_ok=True)
                 core.adLoadW(h, AD_FILE_IMAGE_DATA_BASE, db_dir, 0)
+            t0 = time.perf_counter()
             err = core.adSearch(h)
             if err:
                 sys.exit(f"adSearch error {err}")
+            if a.details:
+                print(f"search took {time.perf_counter() - t0:.3f} s")
             if a.use_db:
                 err = core.adSaveW(h, AD_FILE_IMAGE_DATA_BASE, db_dir)
                 if err:
                     sys.exit(f"saving the image database failed: error {err}")
                 core.adClear(h, AD_FILE_IMAGE_DATA_BASE)
             core.adResultSort(h, AD_SORT_BY_DIFFERENCE, 1)
-            start, count = ctypes.c_size_t(0), ctypes.c_size_t(64)
-            results = (ResultW * 64)()
+            start, count = ctypes.c_size_t(0), ctypes.c_size_t(256)
+            results = (ResultW * 256)()
             core.adResultGetW(h, ctypes.byref(start), results, ctypes.byref(count))
             if a.runs > 1:
                 print(f"-- run {run + 1}")
+            images = {}
             for r in results[:count.value]:
+                if r.type == AD_RESULT_DEFECT_IMAGE:
+                    if a.details:
+                        defect = DEFECTS[r.defect] if 0 <= r.defect < len(DEFECTS) else str(r.defect)
+                        print(f"defect {defect}  {describe(r.first)}")
+                    continue
                 if r.type != AD_RESULT_DUPL_IMAGE_PAIR:
                     continue
+                images[r.first.path] = describe(r.first)
+                images[r.second.path] = describe(r.second)
                 n1, n2 = os.path.basename(r.first.path), os.path.basename(r.second.path)
                 print(f"{r.difference:.9f}  shows {r.difference:.2f}  {ascii(n1)} | {ascii(n2)}")
+            if a.details:
+                for path in sorted(images):
+                    print(f"  {images[path]}")
     finally:
         core.adRelease(h)
     return 0
