@@ -15,6 +15,8 @@
 2. On exit `options.xml` is saved with `<viewMode>VerticalPairTable</viewMode>` → next start "resets".
 3. Until restart, View → mode changes no longer reach the UI (no subscribers on the new object); highlight/stretch/proportional/neighbour settings silently revert to defaults.
 
+Possibly the same bug: [ermig1979/AntiDupl#39](https://github.com/ermig1979/AntiDupl/issues/39) (table looks wrong after Options).
+
 Also: [Options.cs:106-110](../src/AntiDupl.NET.WinForms/Options.cs#L106) returns `new Options()` on *any* deserialisation error, silently resetting everything (another possible "reset" source).
 
 **Fix:**

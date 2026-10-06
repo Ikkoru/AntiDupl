@@ -24,7 +24,7 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
 - [ ] **T9 ⬆ Difference display rule** (user's choice): `0.00` only when identical, any value in (0; 0.01] shows `0.01`, else 2 decimals; bold = byte-identical, tooltip with the exact value; same in clipboard copy. → [01 § F](plan/01-difference-correctness.md)
 - [ ] **T10 Cache everything every mode needs, once.** 64×64 colour thumbnail (area-resampled), area resampling for the 128×128 gray plane. → [01 § G](plan/01-difference-correctness.md), [02](plan/02-comparison-modes.md)
 - [ ] **T11 Algorithm "Local colour difference"** (fast; worst 4×4 block of 64×64 colour thumbnails; default threshold 4). → [02](plan/02-comparison-modes.md)
-- [ ] **T12 Algorithm "Perceptual (Butteraugli)"** (vendored google/butteraugli; candidates from the cheap metric; working size option 384/512/768/1024, default 512; per-pair score cache). → [02](plan/02-comparison-modes.md)
+- [ ] **T12 Algorithm "Perceptual (Butteraugli)"** (vendored google/butteraugli; candidates from the cheap metric; working size option 384/512/768/1024, default 512; per-pair score cache; measure its speed on the user's CPU before settling the default size). → [02](plan/02-comparison-modes.md)
 - [ ] **T13 (optional)** Store all cheap metrics per result and show them as sortable columns, so switching what you sort by needs no new search. → [02](plan/02-comparison-modes.md)
 - [ ] **T14 Calibrate** default thresholds on the user's real duplicate/variant sets (`plan/tools/metric_experiment.py`). → [02](plan/02-comparison-modes.md)
 
