@@ -12,10 +12,13 @@ x_p10.jpg, each with a copy. USER_DIR: a scratch user folder.
    and sides) whatever sort came before (for non-BySorted types: whatever
    non-BySorted sort came before, since BySorted sorts set the sides).
 3. Natural order: sorting by first name puts x_p2 before x_p10.
+4. Sides after the search: every pair has the lesser path first (numbers
+   by value), and rows tied on first directory are in first-path order.
 Prints PASS/FAIL lines; ASCII only.
 """
 import ctypes
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,6 +27,12 @@ import core_search as cs  # noqa: E402
 SORTED = range(1, 13)
 OTHER = [0] + list(range(13, 43))
 failures = 0
+
+
+def natural_key(path):
+    """Upper-cased path with runs of digits compared by value."""
+    parts = re.split(r"(\d+)", path.upper())
+    return [int(part) if i % 2 else part for i, part in enumerate(parts)]
 
 
 def check(ok, what):
@@ -79,6 +88,14 @@ def main():
             return rows()
 
         print(f"{len(rows())} results")
+
+        # 4. Sides after the search (checked first, before any sort)
+        wrong = [r for r in rows() if natural_key(r[1]) < natural_key(r[0])]
+        check(not wrong, f"after the search every pair has the lesser path first ({len(wrong)} not)")
+        by_dir = sort(15, 1)
+        tied_in_order = all(natural_key(a[0]) <= natural_key(b[0]) for a, b in zip(by_dir, by_dir[1:])
+                            if os.path.dirname(a[0]) == os.path.dirname(b[0]))
+        check(tied_in_order, "first-directory sort lists each directory's rows in first-path order")
 
         # 1. Sides
         for t in OTHER:
