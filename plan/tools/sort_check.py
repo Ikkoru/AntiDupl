@@ -6,36 +6,71 @@ SEARCH_DIR needs pairs whose sort keys tie (e.g. files with byte-identical
 copies in a second folder under the same names) and x_p1.jpg, x_p2.jpg,
 x_p10.jpg, each with a copy. USER_DIR: a scratch user folder.
 
-1. Sides: a sort that is not one of the vertical table's BySorted* types
-   must not swap any pair's first and second image.
-2. History: every sort type, both directions, gives the same rows (order
-   and sides) whatever sort came before (for non-BySorted types: whatever
-   non-BySorted sort came before, since BySorted sorts set the sides).
-3. Natural order: sorting by first name puts x_p2 before x_p10.
-4. Sides after the search: every pair has the lesser path first (numbers
-   by value).
-5. Ties: sorting by one image's directory orders rows with the same
-   directory by the other image's directory (in the same direction), then
-   by first path.
+Sort types are AntiDupl's adSortType values. An "image sort" looks at one
+image of each pair: 1-12 (vertical table) and 13-24 the first image, 25-36
+the second; the others (0, 37-42) are "pair sorts" (type, difference ...).
+
+1. After the search every pair has the lesser path first.
+2. Pair sorts keep every pair's sides.
+3. Image sorts put in the sorted image's place the image that comes first
+   in the sort's direction by that property, on a tie by path.
+4. Row order: image sorts go by the sorted image's property, the other
+   image's property, the sorted image's path, the other image's path, all
+   in the sort's direction; pair sorts by their key in the sort's direction,
+   then first path and second path ascending.
+5. History: an image sort gives the same rows whatever sort came before; a
+   pair sort, whatever pair sort came before (image sorts set the sides).
+6. Natural order: sorting by first name puts x_p2 before x_p10.
 Prints PASS/FAIL lines; ASCII only.
 """
 import ctypes
 import os
 import re
 import sys
+from fractions import Fraction
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import core_search as cs  # noqa: E402
 
-SORTED = range(1, 13)
-OTHER = [0] + list(range(13, 43))
+IMAGE_SORTS = range(1, 37)
+PAIR_SORTS = [0] + list(range(37, 43))
 failures = 0
 
 
-def natural_key(path):
-    """Upper-cased path with runs of digits compared by value."""
-    parts = re.split(r"(\d+)", path.upper())
+def natural_key(text):
+    """Upper-cased text with runs of digits compared by value."""
+    parts = re.split(r"(\d+)", text.upper())
     return [int(part) if i % 2 else part for i, part in enumerate(parts)]
+
+
+def sorted_image(t):
+    return 1 if 1 <= t <= 24 else 2 if 25 <= t <= 36 else 0
+
+
+def image_sort_type(t):
+    return t - 24 if t >= 25 else t - 12 if t >= 13 else t
+
+
+def property_key(img, s):
+    """The value an AD_SORT_BY_SORTED_* type compares, as AntiDupl does."""
+    return {
+        1: lambda: natural_key(img["path"]),
+        2: lambda: natural_key(os.path.basename(img["path"])),
+        3: lambda: natural_key(os.path.dirname(img["path"])),
+        4: lambda: img["size"],
+        5: lambda: img["time"],
+        6: lambda: img["type"],
+        7: lambda: img["width"],
+        8: lambda: img["height"],
+        9: lambda: img["width"] * img["height"],
+        10: lambda: Fraction(img["width"], img["height"]),
+        11: lambda: img["blockiness"],
+        12: lambda: img["blurring"],
+    }[s]()
+
+
+def cmp(a, b):
+    return (a > b) - (a < b)
 
 
 def check(ok, what):
@@ -43,6 +78,12 @@ def check(ok, what):
     if not ok:
         failures += 1
     print(("PASS " if ok else "FAIL ") + what)
+
+
+def image(info):
+    return {"path": info.path, "size": info.size, "time": info.time, "type": info.type,
+            "width": info.width, "height": info.height, "blockiness": info.blockiness,
+            "blurring": info.blurring}
 
 
 def main():
@@ -83,66 +124,100 @@ def main():
             start, count = ctypes.c_size_t(0), ctypes.c_size_t(1024)
             results = (cs.ResultW * 1024)()
             core.adResultGetW(h, ctypes.byref(start), results, ctypes.byref(count))
-            rel = lambda q: os.path.relpath(q, p)
-            return [(rel(r.first.path), rel(r.second.path)) for r in results[:count.value]]
+            return [{"first": image(r.first), "second": image(r.second), "difference": r.difference}
+                    for r in results[:count.value] if r.type == cs.AD_RESULT_DUPL_IMAGE_PAIR]
+
+        def sides(rs):
+            return [(r["first"]["path"], r["second"]["path"]) for r in rs]
 
         def sort(t, inc):
             assert core.adResultSort(h, t, inc) == 0
             return rows()
 
-        print(f"{len(rows())} results")
+        def sorted_other(r, t):
+            return (r["first"], r["second"]) if sorted_image(t) == 1 else (r["second"], r["first"])
 
-        # 4. Sides after the search (checked first, before any sort)
-        wrong = [r for r in rows() if natural_key(r[1]) < natural_key(r[0])]
+        def row_key_cmp(a, b, t, inc):
+            """Compares two rows by the documented order; returns -1/0/1."""
+            if sorted_image(t):
+                s = image_sort_type(t)
+                (xa, ya), (xb, yb) = sorted_other(a, t), sorted_other(b, t)
+                for ka, kb in ((property_key(xa, s), property_key(xb, s)),
+                               (property_key(ya, s), property_key(yb, s)),
+                               (natural_key(xa["path"]), natural_key(xb["path"])),
+                               (natural_key(ya["path"]), natural_key(yb["path"]))):
+                    c = cmp(ka, kb)
+                    if c:
+                        return c if inc else -c
+                return 0
+            if t == 38:
+                c = cmp(a["difference"], b["difference"])
+                if c:
+                    return c if inc else -c
+            for ka, kb in ((natural_key(a["first"]["path"]), natural_key(b["first"]["path"])),
+                           (natural_key(a["second"]["path"]), natural_key(b["second"]["path"]))):
+                c = cmp(ka, kb)
+                if c:
+                    return c
+            return 0
+
+        print(f"{len(rows())} pairs")
+
+        # 1. After the search
+        wrong = [r for r in rows() if natural_key(r["second"]["path"]) < natural_key(r["first"]["path"])]
         check(not wrong, f"after the search every pair has the lesser path first ({len(wrong)} not)")
-        # 5. Ties: the other image's same property, then first path.
-        def dir_key(row, side):
-            return natural_key(os.path.dirname(row[side]))
 
-        for t, side, other in ((15, 0, 1), (27, 1, 0)):
+        # 2. Pair sorts keep the sides
+        sort(15, 1)
+        for t in PAIR_SORTS:
             for inc in (1, 0):
-                by_dir = sort(t, inc)
-                pairs = [(a, b) for a, b in zip(by_dir, by_dir[1:]) if dir_key(a, side) == dir_key(b, side)]
-                other_dir = all((dir_key(a, other) <= dir_key(b, other)) if inc else
-                                (dir_key(a, other) >= dir_key(b, other)) for a, b in pairs)
-                first_path = all(natural_key(a[0]) <= natural_key(b[0]) for a, b in pairs
-                                 if dir_key(a, other) == dir_key(b, other))
-                check(other_dir and first_path,
-                      f"sort {t} inc={inc}: rows with the same directory go by the other image's"
-                      f" directory (same direction), then first path")
+                before = set(sides(rows()))
+                after = set(sides(sort(t, inc)))
+                check(before == after, f"pair sort {t} inc={inc} keeps every pair's sides")
 
-        # 1. Sides
-        for t in OTHER:
+        for t in IMAGE_SORTS:
+            s = image_sort_type(t)
             for inc in (1, 0):
-                before = set(rows())
-                after = set(sort(t, inc))
-                check(before == after, f"sort {t} inc={inc} keeps every pair's sides")
-                if before != after:
-                    print(f"     {len(before - after)} pairs changed sides")
+                rs = sort(t, inc)
+                # 3. Orientation
+                bad = 0
+                for r in rs:
+                    x, y = sorted_other(r, t)
+                    c = cmp(property_key(x, s), property_key(y, s)) or \
+                        cmp(natural_key(x["path"]), natural_key(y["path"]))
+                    if (c if inc else -c) > 0:
+                        bad += 1
+                check(bad == 0, f"image sort {t} inc={inc}: the sorted place holds the image that comes"
+                                f" first ({bad} pairs not)")
+                # 4. Row order
+                out = sum(row_key_cmp(a, b, t, inc) > 0 for a, b in zip(rs, rs[1:]))
+                check(out == 0, f"image sort {t} inc={inc}: row order ({out} rows out of order)")
+        for t in PAIR_SORTS:
+            for inc in (1, 0):
+                rs = sort(t, inc)
+                out = sum(row_key_cmp(a, b, t, inc) > 0 for a, b in zip(rs, rs[1:]))
+                check(out == 0, f"pair sort {t} inc={inc}: row order ({out} rows out of order)")
 
-        # 2. History
-        # A BySorted* sort decides the sides on purpose, so the other types
-        # are only checked after other types (the horizontal table's sorts).
+        # 5. History
         priors_all = [(38, 0), (15, 1), (27, 0), (3, 1), (2, 0), (40, 1)]
-        priors_other = [(38, 0), (15, 1), (27, 0), (14, 1), (40, 1), (39, 0)]
-        for t in list(SORTED) + OTHER:
-            priors = priors_all if t in SORTED else priors_other
+        priors_pair = [(38, 0), (40, 1), (39, 0), (0, 1), (42, 0), (41, 1)]
+        for t in list(IMAGE_SORTS) + PAIR_SORTS:
+            priors = priors_all if sorted_image(t) else priors_pair
             for inc in (1, 0):
                 outcomes = []
                 for prior in priors:
                     sort(*prior)
-                    sort(15, 0)
+                    sort(40 if not sorted_image(t) else 15, 0)
                     sort(*prior)
-                    outcomes.append(sort(t, inc))
+                    outcomes.append(sides(sort(t, inc)))
                 same = all(o == outcomes[0] for o in outcomes)
                 check(same, f"sort {t} inc={inc} same rows after {len(priors)} different earlier sorts")
 
-        # 3. Natural order
-        order = [r[0] for r in sort(14, 1) if os.path.basename(r[0]).startswith("x_p")]
+        # 6. Natural order
         names = []
-        for n in order:
-            b = os.path.basename(n)
-            if b not in names:
+        for first, _ in sides(sort(14, 1)):
+            b = os.path.basename(first)
+            if b.startswith("x_p") and b not in names:
                 names.append(b)
         check(names == ["x_p1.jpg", "x_p2.jpg", "x_p10.jpg"], f"first-name order {names}")
     finally:
