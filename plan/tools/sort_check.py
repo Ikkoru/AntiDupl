@@ -13,7 +13,10 @@ x_p10.jpg, each with a copy. USER_DIR: a scratch user folder.
    non-BySorted sort came before, since BySorted sorts set the sides).
 3. Natural order: sorting by first name puts x_p2 before x_p10.
 4. Sides after the search: every pair has the lesser path first (numbers
-   by value), and rows tied on first directory are in first-path order.
+   by value).
+5. Ties: sorting by one image's directory orders rows with the same
+   directory by the other image's directory (in the same direction), then
+   by first path.
 Prints PASS/FAIL lines; ASCII only.
 """
 import ctypes
@@ -92,10 +95,21 @@ def main():
         # 4. Sides after the search (checked first, before any sort)
         wrong = [r for r in rows() if natural_key(r[1]) < natural_key(r[0])]
         check(not wrong, f"after the search every pair has the lesser path first ({len(wrong)} not)")
-        by_dir = sort(15, 1)
-        tied_in_order = all(natural_key(a[0]) <= natural_key(b[0]) for a, b in zip(by_dir, by_dir[1:])
-                            if os.path.dirname(a[0]) == os.path.dirname(b[0]))
-        check(tied_in_order, "first-directory sort lists each directory's rows in first-path order")
+        # 5. Ties: the other image's same property, then first path.
+        def dir_key(row, side):
+            return natural_key(os.path.dirname(row[side]))
+
+        for t, side, other in ((15, 0, 1), (27, 1, 0)):
+            for inc in (1, 0):
+                by_dir = sort(t, inc)
+                pairs = [(a, b) for a, b in zip(by_dir, by_dir[1:]) if dir_key(a, side) == dir_key(b, side)]
+                other_dir = all((dir_key(a, other) <= dir_key(b, other)) if inc else
+                                (dir_key(a, other) >= dir_key(b, other)) for a, b in pairs)
+                first_path = all(natural_key(a[0]) <= natural_key(b[0]) for a, b in pairs
+                                 if dir_key(a, other) == dir_key(b, other))
+                check(other_dir and first_path,
+                      f"sort {t} inc={inc}: rows with the same directory go by the other image's"
+                      f" directory (same direction), then first path")
 
         # 1. Sides
         for t in OTHER:
