@@ -72,6 +72,7 @@ namespace AntiDupl.NET.WinForms
             startFinishForm.ExecuteStart();
 
             InitializeComponents();
+            ThemeColors.Apply(this);
         }
 
         private void InitializeComponents()
