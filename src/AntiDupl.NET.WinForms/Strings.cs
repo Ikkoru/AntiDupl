@@ -45,6 +45,7 @@ namespace AntiDupl.NET.WinForms
         public string ErrorMessage_FileAlreadyExists;
         public string ErrorMessage_SettingsFileUnreadable;
         public string ErrorMessage_SettingsFileUnreadableNotCopied;
+        public string MainForm_SearchFoldersNotFound;
         
         public string WarningMessage_ChangeFileExtension;
 
