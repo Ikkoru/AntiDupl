@@ -21,14 +21,7 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
 
 - [ ] **T7 ⬆ Dark mode** (Windows 11): *View → Theme* (System/Light/Dark), `Application.SetColorMode` before any UI, `ThemeColors` helper, grid headers, verification list. → [04](plan/04-dark-mode.md)
       * First pass on branch `feat/dark-mode`, merged into the personal branch (not pushed): the menu (*As in Windows* / *Light* / *Dark*, applied at the next start; default Light so nothing changes for existing users), `Program` loads the options and sets the mode before `MainForm`, `ThemeColors` (worse-value red, preview background, cell separator; light values unchanged), grid background and dark-mode headers/grid lines, focus rectangle and menu dots in system colours. The identical-difference `LightGreen` is unchanged (readable on dark; its light-mode contrast belongs to T9). Option round trip checked by reflection.
-      * User's look (theme *As in Windows*, Windows dark): much better overall. Open: link colour on the splash screen / About (too dark on dark); jagged light pixels on the *Mark as mistake* and *Help* icons (white-matted edges, hard-edged silver ring); panel and table borders (`Fixed3D` labels/panels, `Inset` table cells) are light and numerous; checkboxes and labels of *Select columns* flashed white once while opening (maybe other forms too).
-
-## Minor — UI polish (found while testing)
-
-- [ ] **M1** View menu: the highlight lags when the pointer passes over items with a sub-menu.
-- [ ] **M2** *Select columns* window is too small for all its options and shows scrollbars.
-- [ ] **M3** Dialogs and other windows don't close with Esc.
-- [ ] **M4** A click on a toolbar button while the window isn't focused is ignored (first click only activates the window). Find out whether that is deliberate (WinForms `ToolStrip` default) before changing it.
+      * Rounds with the user's look (theme *As in Windows*, Windows dark), each choice made from a side-by-side test window: links `#4DA3FF`; panel/label borders a 1 px ControlDark line, none on the split area and the results table; status bar fields divided by a 1 px line and drawing their own text (the dark strip draws it grey); all text `#F8F8F8`; table selection `#1E4C8A` with light text (the system pairs its blue with black text); no current-row outline; check boxes drawn by `ThemedCheckBox` (ticked = selection blue), also in the Paths lists (`ThemedCheckedListBox`, `ThemedListBox`); drop-down lists `FlatStyle.Popup`; text and number boxes framed like the panels (`ThemeColors.Framed`, keeping the bordered height); Help, Help-menu and Mark-as-mistake icons edited by the user. Open: checkboxes and labels of *Select columns* flashed white once while opening; occasional white frame on drop-down lists on hover (system-drawn); the user's thorough look.
 - [ ] **T8 ⬆ "0 means pixel-identical".** XXH3-64 hash of the full decoded pixels; `0` = byte-identical, `1e-6` = pixel-identical, `≥ 1e-4` = different; threshold 0 % = pixel-identical only. → [01 § E](plan/01-difference-correctness.md)
 - [ ] **T9 ⬆ Difference display rule** (user's choice): `0.00` only when identical, any value in (0; 0.01] shows `0.01`, else 2 decimals; bold = byte-identical, tooltip with the exact value; same in clipboard copy. → [01 § F](plan/01-difference-correctness.md)
 - [ ] **T10 Cache everything every mode needs, once.** 64×64 colour thumbnail (area-resampled), area resampling for the 128×128 gray plane. → [01 § G](plan/01-difference-correctness.md), [02](plan/02-comparison-modes.md)
@@ -36,6 +29,14 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
 - [ ] **T12 Algorithm "Perceptual (Butteraugli)"** (vendored google/butteraugli; candidates from the cheap metric; working size option 384/512/768/1024, default 512; per-pair score cache; measure its speed on the user's CPU before settling the default size). → [02](plan/02-comparison-modes.md)
 - [ ] **T13 (optional)** Store all cheap metrics per result and show them as sortable columns, so switching what you sort by needs no new search. → [02](plan/02-comparison-modes.md)
 - [ ] **T14 Calibrate** default thresholds on the user's real duplicate/variant sets (`plan/tools/metric_experiment.py`). → [02](plan/02-comparison-modes.md)
+- [ ] **T15 ⬆ Search folders on the command line** (requested for another of the user's tools, which opens AntiDupl on one artist's folders). Proposal: `-search <folder> [<folder> …]`, subfolders included, replacing the profile's search folders for that run only (profile and its results file untouched); details from the requesting tool's answer (start the search at once or wait; per-folder subfolder control; anything handed back; which build it launches).
+
+## Minor — UI polish (found while testing)
+
+- [ ] **M1** View menu: the highlight lags when the pointer passes over items with a sub-menu.
+- [ ] **M2** *Select columns* window is too small for all its options and shows scrollbars.
+- [ ] **M3** Dialogs and other windows don't close with Esc.
+- [ ] **M4** A click on a toolbar button while the window isn't focused is ignored (first click only activates the window). Find out whether that is deliberate (WinForms `ToolStrip` default) before changing it.
 
 ## P2 — Stretch goals (noted; not to be done unless asked)
 
