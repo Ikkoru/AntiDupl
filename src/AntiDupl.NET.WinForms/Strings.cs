@@ -43,6 +43,7 @@ namespace AntiDupl.NET.WinForms
         public string SetDefaultButton_Text;
 
         public string ErrorMessage_FileAlreadyExists;
+        public string MainForm_SearchFoldersNotFound;
         
         public string WarningMessage_ChangeFileExtension;
 

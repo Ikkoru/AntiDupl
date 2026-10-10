@@ -46,6 +46,14 @@ namespace AntiDupl.NET.WinForms
         public CorePathWithSubFolder[] deletePath;
         public string ignoreFilenameFilter; // Regular expression pattern to filter files in ignore paths
 
+        /// <summary>
+        /// While the command line's -search replaces the search folders for
+        /// one run: the profile's own folders, which Save writes instead, so
+        /// the profile keeps them. Null otherwise. Neither copied nor saved.
+        /// </summary>
+        [XmlIgnore]
+        public CorePathWithSubFolder[] profileSearchPath;
+
         public CoreOptions()
         {
             searchOptions = new CoreSearchOptions();
@@ -267,6 +275,12 @@ namespace AntiDupl.NET.WinForms
 
         public void Save(string fileName)
         {
+            CorePathWithSubFolder[] oneOffSearchPath = null;
+            if (profileSearchPath != null)
+            {
+                oneOffSearchPath = searchPath;
+                searchPath = profileSearchPath;
+            }
             TextWriter writer = null;
             try
             {
@@ -279,6 +293,8 @@ namespace AntiDupl.NET.WinForms
             }
             if (writer != null)
                 writer.Close();
+            if (oneOffSearchPath != null)
+                searchPath = oneOffSearchPath;
         }
 
         public string GetImageDataBasePath()

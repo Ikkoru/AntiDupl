@@ -349,6 +349,9 @@ namespace AntiDupl.NET.WinForms
                     saveProgressForm.Execute();
                     m_options.coreOptionsFileName = dialog.FileName;
                 }*/
+                // A one-off -search run saved under a new name keeps its
+                // folders and becomes that profile.
+                m_coreOptions.profileSearchPath = null;
                 m_options.coreOptionsFileName = dialog.FileName;
                 m_coreOptions.Save(m_options.coreOptionsFileName);
                 ProgressForm progressForm = new ProgressForm(ProgressForm.Type.SaveResults, m_core, m_options, m_coreOptions, m_mainSplitContainer);
@@ -375,13 +378,19 @@ namespace AntiDupl.NET.WinForms
                 if (string.Compare(dialog.FileName, m_options.coreOptionsFileName) != 0)
                 {
                     m_coreOptions.Save(m_options.coreOptionsFileName);
-                    ProgressForm saveProgressForm = new ProgressForm(ProgressForm.Type.SaveResults, m_core, m_options, m_coreOptions, m_mainSplitContainer);
-                    saveProgressForm.Execute();
+                    // A one-off -search run leaves the profile's results file as it was.
+                    if (m_coreOptions.profileSearchPath == null)
+                    {
+                        ProgressForm saveProgressForm = new ProgressForm(ProgressForm.Type.SaveResults, m_core, m_options, m_coreOptions, m_mainSplitContainer);
+                        saveProgressForm.Execute();
+                    }
                     m_options.coreOptionsFileName = dialog.FileName;
                 }
 
                 CoreOptions coreOptions = CoreOptions.Load(m_options.coreOptionsFileName, m_core, m_options.onePath);
                 coreOptions.CopyTo(ref m_coreOptions);
+                // The opened profile's own folders are in use: a one-off run ends here.
+                m_coreOptions.profileSearchPath = null;
                 ProgressForm loadProgressForm = new ProgressForm(ProgressForm.Type.LoadResults, m_core, m_options, m_coreOptions, m_mainSplitContainer);
                 loadProgressForm.Execute();
 
