@@ -332,7 +332,7 @@ namespace AntiDupl.NET.WinForms
             cells[(int)ResultsListView.ColumnsTypeHorizontal.Difference].Style.Font =
                 new Font(DataGridView.DefaultFont, DifferenceFormat.IsByteIdentical(result.difference) ? FontStyle.Bold : FontStyle.Regular);
             cells[(int)ResultsListView.ColumnsTypeHorizontal.Difference].Style.ForeColor =
-                DifferenceFormat.IsIdentical(result.difference) ? Color.LightGreen : ThemeColors.Text;
+                DifferenceFormat.GetColor(result.difference, ThemeColors.Text);
             cells[(int)ResultsListView.ColumnsTypeHorizontal.Difference].Style.Alignment = DataGridViewContentAlignment.MiddleRight;
             cells[(int)ResultsListView.ColumnsTypeHorizontal.Difference].ToolTipText =
                 DifferenceFormat.IsByteIdentical(result.difference) ? m_byteIdenticalToolTipText :
