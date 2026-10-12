@@ -3,7 +3,7 @@
 Usage:
     python core_search.py DLL_DIR USER_DIR SEARCH_DIR [--size N] [--threshold N]
                           [--turbo 0|1] [--algorithm 0|1] [--runs N] [--use-db]
-                          [--details] [--collect-threads N]
+                          [--details] [--collect-threads N] [--transformed]
 
 DLL_DIR     folder holding AntiDupl.dll (e.g. bin\\Release of a build)
 USER_DIR    the engine's user folder (settings, image database); created if
@@ -22,9 +22,12 @@ SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
             not decode are AD_DEFECT_UNKNOWN), and for every image in a result
             its type, size and non-empty EXIF fields
 --collect-threads  number of threads that decode images (timing)
+--transformed      also search rotated and mirrored copies ("Search rotated
+            and mirror image dupls")
 
 Prints one line per pair: difference with full precision, the 2-decimal value
-the UI shows, and the two file names. Output is ASCII-only.
+the UI shows, and the two file names; for a pair found as a rotated or mirrored
+copy, the transform's number (AD_TRANSFORM_*) after them. Output is ASCII-only.
 """
 import argparse
 import ctypes
@@ -104,6 +107,7 @@ def main():
     ap.add_argument("--use-db", action="store_true")
     ap.add_argument("--details", action="store_true")
     ap.add_argument("--collect-threads", type=int)
+    ap.add_argument("--transformed", action="store_true")
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -137,6 +141,7 @@ def main():
         cmp_.algorithmComparing = a.algorithm
         cmp_.compareInsideOneFolder = 1
         cmp_.checkOnEquality = 1
+        cmp_.transformedImage = 1 if a.transformed else 0
         assert core.adOptionsSet(h, AD_OPTIONS_COMPARE, ctypes.byref(cmp_)) == 0
         adv = AdvancedOptions()
         core.adOptionsGet(h, AD_OPTIONS_ADVANCED, ctypes.byref(adv))
@@ -186,7 +191,8 @@ def main():
                 images[r.first.path] = describe(r.first)
                 images[r.second.path] = describe(r.second)
                 n1, n2 = os.path.basename(r.first.path), os.path.basename(r.second.path)
-                print(f"{r.difference:.9f}  shows {r.difference:.2f}  {ascii(n1)} | {ascii(n2)}")
+                transform = f"  transform {r.transform}" if r.transform else ""
+                print(f"{r.difference:.9f}  shows {r.difference:.2f}  {ascii(n1)} | {ascii(n2)}{transform}")
             if a.details:
                 for path in sorted(images):
                     print(f"  {images[path]}")
