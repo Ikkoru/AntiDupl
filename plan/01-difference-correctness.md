@@ -65,7 +65,7 @@ bool supported = (size >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 
 
 The `.adi` cache stores the 128×128 planes keyed by path + size + mtime. After A/B, cached planes of every JFIF JPEG are wrong (swapped) while newly computed ones are right — mixing them is worse than either. "Delete irrelevant records from a database of image" only drops records of missing files, so it doesn't help.
 
-**Fix:** bump `FILE_VERSION` 4 → 5 ([adConfig.h:107](../src/AntiDupl/adConfig.h#L107)) and, in `TInputFileStream::Load(TImageData&)` ([adFileStream.cpp:154](../src/AntiDupl/adFileStream.cpp#L154)), when `m_version < 5` read the old record but then set `data->filled = false`, `blockiness = -1`, `blurring = -1` so `PixelDataFillingNeed()` ([adImageData.cpp:112](../src/AntiDupl/adImageData.cpp#L112)) recomputes it. Keep type/size/crc/defect. `TDataCollector::FillPixelData` must also reset the plane's `average` and `varianceSquare` to 0: the SSIM comparer only computes them while they are 0 ([adImageComparer.cpp:355](../src/AntiDupl/adImageComparer.cpp#L355)), so a recomputed plane would otherwise be compared with the old record's values (tested: 1e-6 for the "Different" pair, 0.61 for an "Identical" one). With D's fix the comparer no longer reads these cached values, and the reset can go. Note: `.adr` (results) and `.adm` (mistakes) share the version header; files written by the new build can't be read by old builds (fine; document it). Bundle every per-image format change planned in this folder (sums, pixel hash, colour thumbnail, area resampling) into this one bump for the local build so the user re-decodes the library only once.
+**Fix:** bump `FILE_VERSION` 4 → 5 ([adConfig.h:107](../src/AntiDupl/adConfig.h#L107)) and, in `TInputFileStream::Load(TImageData&)` ([adFileStream.cpp:154](../src/AntiDupl/adFileStream.cpp#L154)), when `m_version < 5` read the old record but then set `data->filled = false`, `blockiness = -1`, `blurring = -1` so `PixelDataFillingNeed()` ([adImageData.cpp:112](../src/AntiDupl/adImageData.cpp#L112)) recomputes it. Keep type/size/crc/defect. `TDataCollector::FillPixelData` must also reset the plane's `average` and `varianceSquare` to 0: the SSIM comparer only computes them while they are 0 ([adImageComparer.cpp:355](../src/AntiDupl/adImageComparer.cpp#L355)), so a recomputed plane would otherwise be compared with the old record's values (tested: 1e-6 for the "Different" pair, 0.61 for an "Identical" one). With D's fix the comparer no longer reads these cached values, and the reset can go. The image database must also be saved after such an upgrade: it is saved only when an image is new or changed, so the upgraded records were decoded again on every search (`fix/db-upgrade-save` marks it for saving when a data file of an older version is loaded). Note: `.adr` (results) and `.adm` (mistakes) share the version header; files written by the new build can't be read by old builds (fine; document it). Bundle every per-image format change planned in this folder (sums, pixel hash, colour thumbnail, area resampling) into this one bump for the local build so the user re-decodes the library only once.
 
 ## Bug D — float noise: identical planes get 7.6e-6 (≈30 % of the time)
 
@@ -133,6 +133,8 @@ Even with A–D, (a) two *different* images can share a 128×128 plane (differen
 * Sorting ascending puts byte-identical, then pixel-identical, then everything else — no UI work needed.
 * (Later, optional) replace the epsilon trick with explicit `identity` flags in `adResult` (ABI change).
 
+**As implemented** (`feat/pixel-identity`): the hash lives in `TPixelData` (filled with the plane, saved with it, reset by `Turn`/`Mirror`); xxhash is used header-only (`XXH_INLINE_ALL`); the floor is `MIN_DIFFERENCE_OF_DIFFERENT_PIXELS`; `FILE_VERSION` 6, since upstream already used 5 for Bug A. Tests: [`tools/make_identity_cases.sh`](tools/make_identity_cases.sh). Found on the way: an upgraded image database was never saved (`fix/db-upgrade-save`, see Bug C).
+
 ## Feature F — display rule chosen by the user
 
 > "As long as it sorts correctly, the column remains narrow, and I don't get confused by a 0.00 that has changes … Can it just show 0.01 on any (0; 0.01]?"
@@ -147,6 +149,8 @@ public static string FormatDifference(double d) =>
 ```
 
 Styling: `d == 0` → bold + "identical" colour; `0 < d < 1e-5` → regular + same colour, tooltip "Pixel-identical (file bytes differ)"; tooltip on every cell with `d.ToString("R")`. Colours come from the theme helper of [04](04-dark-mode.md) (today's `LightGreen` is barely readable on white). Sorting is done in the core on the raw double ([adResult.cpp:238-241](../src/AntiDupl/adResult.cpp#L238)), so it stays exact.
+
+**As implemented** (`feat/difference-display`): `DifferenceFormat` (`ToString`, `IsIdentical`, `IsByteIdentical`, `ToExactString` with six decimals for the tooltip); the identical colour stays `LightGreen`, since the theme helper is on the separate dark-mode branch.
 
 ## Optional G — area resampling for the 128×128 plane
 
