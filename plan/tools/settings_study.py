@@ -44,6 +44,7 @@ import csv
 import itertools
 import os
 import pickle
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -722,6 +723,7 @@ def compute(a, images):
             out["case_a"], out["case_b"] = images[r["a"]]["case"], images[r["b"]]["case"]
             out["a"], out["b"] = images[r["a"]]["file"], images[r["b"]]["file"]
             w.writerow(out)
+    shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":
