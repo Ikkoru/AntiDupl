@@ -73,6 +73,15 @@ GROUPS = [("compression", lambda s: s.startswith(("jpeg-", "webp-", "avif-", "jx
           ("overlay", lambda s: s.startswith(("border-", "watermark-"))),
           ("greyscale", lambda s: s == "gray"),
           ("transform", lambda s: s in ("mirror", "rotate-90"))]
+# Copies that differ from the original only in encoding and resolution.
+PLAIN = {"original", "compression", "resolution", "web copy", "upscaled"}
+
+
+def kind_of(img):
+    """"original", the kind of difference of a derived image, or None."""
+    if img["kind"] == "original":
+        return "original"
+    return next((g for g, test in GROUPS if test(img["stem"])), None)
 
 
 # ----------------------------------------------------------------- images
@@ -298,38 +307,44 @@ def auc(copies, versions):
 def task_a(rows, names, images, lines):
     lines += ["## A. Copies vs versions", "",
               "Results sorted by the metric, smallest first, as the user works through them. **Before last copy**: "
-              "how many version pairs (of all) come before the last copy pair. **AUC**: the chance that a copy pair "
-              "comes before a version pair (1 = always). Per copy type below: how many versions come before the "
-              "original~that-copy pairs.", ""]
+              "how many version pairs (of all) come before the last copy pair. **Plain copies**: the original and "
+              "its compressed, resized, web and upscaled copies, any two of them; the processed copies (sharpened, "
+              "blurred, brighter, more saturated) count only in the last column. **AUC**: the chance that a copy "
+              "pair (any) comes before a version pair (1 = always). Per copy type below: how many versions come "
+              "before the original~that-copy pairs.", ""]
     versions_all = [r for r in rows if r["class"] in VERSION_CLASSES]
     copies = [r for r in rows if r["class"] == "copy"]
-    lines += [f"{len(copies)} copy pairs, {len(versions_all)} version pairs.", "",
-              "| Metric | AUC | Before last copy | Before last copy, without the 12-25 % copies |", "|---|---|---|---|"]
-    table = []
     small = ("scale-12", "scale-25", "scale-25-jpeg-q75")
+    plain = [r for r in copies if all(kind_of(images[r[k]]) in PLAIN for k in ("a", "b"))]
+    plain_big = [r for r in plain if not any(images[r[k]]["stem"] in small for k in ("a", "b"))]
+    lines += [f"{len(copies)} copy pairs ({len(plain)} plain), {len(versions_all)} version pairs.", "",
+              "| Metric | AUC | Before last plain copy | The same without the 12-25 % copies | Before last copy, "
+              "processed ones included |", "|---|---|---|---|---|"]
+    table = []
     for n in names:
-        cv = [r[n] for r in copies if r[n] != ""]
         vv = [r[n] for r in versions_all if r[n] != ""]
-        cmax = max(cv)
-        before = sum(1 for x in vv if x <= cmax)
-        cv2 = [r[n] for r in copies if r[n] != "" and not any(s == images[r["a"]]["stem"] or s == images[r["b"]]["stem"] for s in small)]
-        before2 = sum(1 for x in vv if x <= max(cv2))
-        table.append((auc(cv, vv), n, before, before2, len(vv)))
+
+        def before(pairs):
+            return sum(1 for x in vv if x <= max(r[n] for r in pairs if r[n] != ""))
+
+        table.append((auc([r[n] for r in copies if r[n] != ""], vv), n, before(plain), before(plain_big),
+                      before(copies), len(vv)))
     table.sort(key=lambda t: (-t[0], t[2]))
-    for a_, n, before, before2, total in table:
-        lines.append(f"| {n} | {a_:.4f} | {before} ({100 * before / total:.1f} %) | {before2} ({100 * before2 / total:.1f} %) |")
-    lookup = {n: (a_, before, before2) for a_, n, before, before2, total in table}
+    for a_, n, b_plain, b_big, b_all, total in table:
+        lines.append(f"| {n} | {a_:.4f} | {b_plain} ({100 * b_plain / total:.1f} %) | "
+                     f"{b_big} ({100 * b_big / total:.1f} %) | {b_all} ({100 * b_all / total:.1f} %) |")
+    lookup = {t[1]: t for t in table}
     lines += ["", "### AntiDupl's algorithms per setting", "",
-              "Versions before the last copy, all copies / without the 12-25 % copies, per reduced size; the "
+              "Versions before the last plain copy, with / without the 12-25 % copies, per reduced size; the "
               "local colour difference is the planned algorithm of plan 02 (area resampling only).", "",
               "| Algorithm | Plane | Resampling | " + " | ".join(str(s) for s in sm.SIZES) + " |",
               "|---|---|---|" + "---|" * len(sm.SIZES)]
     for alg, label in (("ssim", "SSIM"), ("msd", "mean square")):
         for colour in ("gray", "colour"):
             for resample in ("bilinear", "area"):
-                cells = ["{1} / {2}".format(*lookup[f"antidupl-{alg}-{colour}-{resample}-{s}"]) for s in sm.SIZES]
+                cells = ["{2} / {3}".format(*lookup[f"antidupl-{alg}-{colour}-{resample}-{s}"]) for s in sm.SIZES]
                 lines.append(f"| {label} | {colour} | {resample} | " + " | ".join(cells) + " |")
-    cells = ["{1} / {2}".format(*lookup[f"colour-block-{s}"]) if f"colour-block-{s}" in lookup else "-" for s in sm.SIZES]
+    cells = ["{2} / {3}".format(*lookup[f"colour-block-{s}"]) if f"colour-block-{s}" in lookup else "-" for s in sm.SIZES]
     lines.append("| local colour | colour | area | " + " | ".join(cells) + " |")
     # The original against each kind of difference, all versions against them.
     by_group = {g: [] for g, _ in GROUPS}
@@ -337,9 +352,8 @@ def task_a(rows, names, images, lines):
         ia, ib = images[r["a"]], images[r["b"]]
         if ia["case"] != ib["case"] or "original" not in (ia["kind"], ib["kind"]):
             continue
-        stem = ib["stem"] if ia["kind"] == "original" else ia["stem"]
-        g = next((g for g, test in GROUPS if test(stem)), None)
-        if g:
+        g = kind_of(ib if ia["kind"] == "original" else ia)
+        if g in by_group:
             by_group[g].append(r)
     score = {}
     for n in names:
@@ -380,11 +394,10 @@ def task_a(rows, names, images, lines):
                   and t in (images[r["a"]]["stem"], images[r["b"]]["stem"])]
             cells.append(str(int((vv <= max(tv)).sum())) if tv else "-")
         lines.append(f"| {n} | " + " | ".join(cells) + " |")
-    lines += ["", "### Version classes before the last copy (without the 12-25 % copies)", "",
+    lines += ["", "### Version classes before the last plain copy (without the 12-25 % copies)", "",
               "| Metric | " + " | ".join(VERSION_CLASSES) + " |", "|---|" + "---|" * len(VERSION_CLASSES)]
     for n in names:
-        cv2 = [r[n] for r in copies if r[n] != "" and not any(s in (images[r["a"]]["stem"], images[r["b"]]["stem"]) for s in small)]
-        t = max(cv2)
+        t = max(r[n] for r in plain_big if r[n] != "")
         cells = []
         for c in VERSION_CLASSES:
             vals = [r[n] for r in rows if r["class"] == c and r[n] != ""]
@@ -417,6 +430,24 @@ def loss(img):
     q = img["quality"]
     quality = 100.0 if codec == "lossless" else float(q) if q.replace(".", "").isdigit() else None
     return float(img["scale"]), quality, int(img["generations"]), float(img["kept"]), codec
+
+
+def better_copy(i, j, images, quality):
+    """Of two images of the same picture, the one judged better: more
+    pixels; at the same pixel count lossless over lossy; both lossless,
+    clearly more detail (an upscaled copy has less); both JPEG, the higher
+    quality estimate; else the larger file."""
+    qi, qj = quality[i], quality[j]
+    if abs(qi["pixels"] - qj["pixels"]) > 0.005 * max(qi["pixels"], qj["pixels"]):
+        return i if qi["pixels"] > qj["pixels"] else j
+    ci, cj = loss(images[i])[4], loss(images[j])[4]
+    if (ci == "lossless") != (cj == "lossless"):
+        return i if ci == "lossless" else j
+    if ci == cj == "lossless" and max(qi["detail"], qj["detail"]) > 1.25 * min(qi["detail"], qj["detail"]):
+        return i if qi["detail"] > qj["detail"] else j
+    if ci == cj == "jpeg" and qi["jpeg_quality"] != qj["jpeg_quality"]:
+        return i if qi["jpeg_quality"] > qj["jpeg_quality"] else j
+    return i if qi["size"] > qj["size"] else j
 
 
 def task_b(images, quality, lines):
@@ -475,6 +506,12 @@ def task_b(images, quality, lines):
                 score += 1.0 if sign * x > sign * y else 0.5 if x == y else 0.0
             cells.append(f"{100 * score / n:.0f} % ({n})" if n else "-")
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
+    cells = []
+    for k, pairs in groups.items():
+        right = sum(1 for good, bad in pairs if better_copy(good, bad, images, quality) == good)
+        cells.append(f"{100 * right / len(pairs):.0f} % ({right} of {len(pairs)})" if pairs else "-")
+    lines.append("| **rule** of `better_copy` (pixels, lossless, detail, JPEG quality, file size) | "
+                 + " | ".join(cells) + " |")
 
 
 def task_c(rows, images, lines):
@@ -518,7 +555,9 @@ def task_c(rows, images, lines):
              and stem in (images[r["a"]]["stem"], images[r["b"]]["stem"]) and images[r["a"]]["case"] == images[r["b"]]["case"]]
         if not g:
             continue
-        truth = images[g[0]["a"]]["kept"] if images[g[0]["a"]]["stem"] == stem else images[g[0]["b"]]["kept"]
+        # The truth depends on the case for crop-square (its aspect ratio).
+        truths = [float(images[r["a"]]["kept"] if images[r["a"]]["stem"] == stem else images[r["b"]]["kept"]) for r in g]
+        truth = f"{truths[0]:.2f}" if len(set(truths)) == 1 else " ".join(f"{t:.2f}" for t in truths)
         est = []
         rot = []
         for r in g:
@@ -551,6 +590,23 @@ def read_rows(out, images):
             for k in names + EXTRA:
                 row[k] = "" if r.get(k, "") == "" else float(r[k])
             rows.append(row)
+    # Metrics computed by other tools (embed_metrics.py): pairs-*.csv,
+    # joined on the pair.
+    at = {(images[r["a"]]["case"], images[r["a"]]["file"], images[r["b"]]["case"], images[r["b"]]["file"]): r
+          for r in rows}
+    for extra in sorted(f for f in os.listdir(out) if f.startswith("pairs-") and f.endswith(".csv")):
+        with open(os.path.join(out, extra), encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            more = reader.fieldnames[4:]
+            for r in reader:
+                row = at.get((r["case_a"], r["a"], r["case_b"], r["b"]))
+                if row is not None:
+                    for k in more:
+                        row[k] = "" if r[k] == "" else float(r[k])
+        for row in rows:
+            for k in more:
+                row.setdefault(k, "")
+        names = names + more
     return rows, names
 
 
