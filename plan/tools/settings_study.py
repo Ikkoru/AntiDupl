@@ -2,13 +2,15 @@
 sample set, judged on three tasks.
 
 Usage: py -3 settings_study.py <set> <cache> <out> [--dll <bin\\Release>]
-                                [--workers N] [--no-slow]
+                                [--workers N] [--no-slow] [--cases a,b]
+                                [--analysis-only]
 
 <set> is study_set.py's output (one folder per case, each with
 manifest.tsv). <cache> holds per-image features and working copies
 (rebuildable, gets a CACHEDIR.TAG). --dll: a build whose AntiDupl.dll
 gives the core's blockiness and blurring per image (via core_search.py).
---no-slow leaves out Butteraugli and SSIMULACRA2.
+--no-slow leaves out Butteraugli and SSIMULACRA2. --analysis-only
+rewrites summary.md from the pairs.csv and quality.csv already in <out>.
 
 Writes to <out>: pairs.csv (one row per pair, a column per metric),
 quality.csv (per image), summary.md (the tables of plan 07).
@@ -29,10 +31,11 @@ copy of it):
     other, unrelated
 Tasks:
     A  copies vs versions: per metric, with the results sorted by it, how
-       many versions come before the last copy, overall and per copy type
+       many versions come before the last copy, overall, per kind of
+       difference (compression, resolution, crop, ...) and per copy type
     B  which copy is worse: pairs of copies/crops that differ in one way
-       (compression, resolution, crop) or are a web copy of the original;
-       per quality indicator, how often it picks the worse one
+       (compression, resolution, crop, upscaling) or are a web copy of the
+       original; per quality indicator, how often it picks the worse one
     C  is one a crop or transform of the other: SIFT alignment, against the
        truth of the manifests
 """
@@ -60,6 +63,16 @@ EDIT_CLASS = {"sign": "edit-minor", "bar": "edit-minor", "mosaic": "edit-medium"
               "clone": "edit-medium", "recolour-local": "edit-medium", "recolour-global": "edit-major"}
 CLEAN = {"original", "copy"}
 VERSIONS = {"variant", "step", "edit"}
+# Kinds of difference of the derived images, by file stem.
+GROUPS = [("compression", lambda s: s.startswith(("jpeg-", "webp-", "avif-", "jxl-"))),
+          ("resolution", lambda s: s.startswith("scale-") and "jpeg" not in s),
+          ("web copy", lambda s: s.startswith("scale-") and "jpeg" in s),
+          ("upscaled", lambda s: s.startswith("upscale-")),
+          ("processed", lambda s: s in ("sharpen", "blur", "brighter", "saturated")),
+          ("crop", lambda s: s.startswith("crop-")),
+          ("overlay", lambda s: s.startswith(("border-", "watermark-"))),
+          ("greyscale", lambda s: s == "gray"),
+          ("transform", lambda s: s in ("mirror", "rotate-90"))]
 
 
 # ----------------------------------------------------------------- images
@@ -89,8 +102,14 @@ def build_features(job):
     if os.path.exists(pkl):
         try:
             with open(pkl, "rb") as f:
-                if pickle.load(f)["stamp"] == stamp and os.path.exists(w512) and os.path.exists(w1024):
-                    return pkl
+                cached = pickle.load(f)
+            if cached["stamp"] == stamp and os.path.exists(w512) and os.path.exists(w1024):
+                if set(sm.HASHES) - set(cached["hashes"]):
+                    # Cached before a hash was added: only the hashes again.
+                    cached["hashes"] = sm.hashes(sm.longest(sm.open_image(path).convert("RGB"), 512))
+                    with open(pkl, "wb") as f:
+                        pickle.dump(cached, f, protocol=5)
+                return pkl
         except Exception:
             pass
     os.makedirs(os.path.dirname(pkl), exist_ok=True)
@@ -167,9 +186,8 @@ def metric_names(slow):
                     names.append(f"antidupl-{alg}-{colour}-{resample}-{s}")
     names += [f"colour-block-{s}" for s in (32, 64, 128)]
     names += ["wssim-gray-mean", "wssim-gray-worst", "wssim-colour-mean", "wssim-colour-worst", "ms-ssim", "gmsd",
-              "ciede2000-mean", "ciede2000-p99", "psnr", "hist-intersection", "hist-bhattacharyya",
-              "ahash", "dhash", "phash", "whash", "colorhash", "crop-resistant-hash",
-              "sift-unmatched", "aligned-colour-block-64"]
+              "haarpsi", "vifp", "ciede2000-mean", "ciede2000-p99", "psnr", "hist-intersection", "hist-bhattacharyya",
+              *sm.HASHES, "crop-resistant-hash", "sift-unmatched", "aligned-colour-block-64"]
     if slow:
         names += ["butteraugli-512", "butteraugli-3norm-512", "butteraugli-1024", "butteraugli-3norm-1024",
                   "ssimulacra2-512", "ssimulacra2-1024"]
@@ -218,10 +236,12 @@ def compute_pairs(job):
         row["wssim-colour-mean"], row["wssim-colour-worst"] = sm.windowed_ssim(qa, qb, True)
         row["ms-ssim"] = sm.ms_ssim(qa, qb)
         row["gmsd"] = sm.gmsd(qa, qb)
+        row["haarpsi"] = sm.haarpsi(qa, qb)
+        row["vifp"] = sm.vifp(qa, qb)
         row["ciede2000-mean"], row["ciede2000-p99"] = sm.ciede2000(qa, qb)
         row["psnr"] = sm.psnr(qa, qb)
         row["hist-intersection"], row["hist-bhattacharyya"] = sm.hist_distance(fa["hist"], fb["hist"])
-        for h in ("ahash", "dhash", "phash", "whash", "colorhash"):
+        for h in sm.HASHES:
             row[h] = sm.hamming(fa["hashes"][h], fb["hashes"][h])
         row["crop-resistant-hash"] = sm.crop_resistant(fa["crh"], fb["crh"])
         inliers, matches, model = sm.align(fa, fb)
@@ -298,6 +318,54 @@ def task_a(rows, names, images, lines):
     table.sort(key=lambda t: (-t[0], t[2]))
     for a_, n, before, before2, total in table:
         lines.append(f"| {n} | {a_:.4f} | {before} ({100 * before / total:.1f} %) | {before2} ({100 * before2 / total:.1f} %) |")
+    lookup = {n: (a_, before, before2) for a_, n, before, before2, total in table}
+    lines += ["", "### AntiDupl's algorithms per setting", "",
+              "Versions before the last copy, all copies / without the 12-25 % copies, per reduced size; the "
+              "local colour difference is the planned algorithm of plan 02 (area resampling only).", "",
+              "| Algorithm | Plane | Resampling | " + " | ".join(str(s) for s in sm.SIZES) + " |",
+              "|---|---|---|" + "---|" * len(sm.SIZES)]
+    for alg, label in (("ssim", "SSIM"), ("msd", "mean square")):
+        for colour in ("gray", "colour"):
+            for resample in ("bilinear", "area"):
+                cells = ["{1} / {2}".format(*lookup[f"antidupl-{alg}-{colour}-{resample}-{s}"]) for s in sm.SIZES]
+                lines.append(f"| {label} | {colour} | {resample} | " + " | ".join(cells) + " |")
+    cells = ["{1} / {2}".format(*lookup[f"colour-block-{s}"]) if f"colour-block-{s}" in lookup else "-" for s in sm.SIZES]
+    lines.append("| local colour | colour | area | " + " | ".join(cells) + " |")
+    # The original against each kind of difference, all versions against them.
+    by_group = {g: [] for g, _ in GROUPS}
+    for r in rows:
+        ia, ib = images[r["a"]], images[r["b"]]
+        if ia["case"] != ib["case"] or "original" not in (ia["kind"], ib["kind"]):
+            continue
+        stem = ib["stem"] if ia["kind"] == "original" else ia["stem"]
+        g = next((g for g, test in GROUPS if test(stem)), None)
+        if g:
+            by_group[g].append(r)
+    score = {}
+    for n in names:
+        vv = [r[n] for r in versions_all if r[n] != ""]
+        for g, pairs in by_group.items():
+            gv = [r[n] for r in pairs if r[n] != ""]
+            if gv:
+                score[(n, g)] = (auc(gv, vv), sum(1 for x in vv if x <= max(gv)))
+    lines += ["", "### Best at each kind of difference", "",
+              "The original against the copies of one kind (crops, overlays, greyscale and transforms are the "
+              "user's call), each metric judged as above: AUC against all versions, and in brackets how many "
+              "versions come before that kind's worst pair.", "",
+              "| Kind | Pairs | Best five | Best AntiDupl setting |", "|---|---|---|---|"]
+    for g, pairs in by_group.items():
+        ranked = sorted((n for n in names if (n, g) in score), key=lambda n: (-score[(n, g)][0], score[(n, g)][1]))
+        if not ranked:
+            continue
+        best = ", ".join(f"{n} {score[(n, g)][0]:.3f} ({score[(n, g)][1]})" for n in ranked[:5])
+        own = next((n for n in ranked if n.startswith("antidupl-")), None)
+        own_cell = f"{own} {score[(own, g)][0]:.3f} ({score[(own, g)][1]})" if own else "-"
+        lines.append(f"| {g} | {len(pairs)} | {best} | {own_cell} |")
+    groups = [g for g in by_group if by_group[g]]
+    lines += ["", "| Metric | " + " | ".join(groups) + " |", "|---|" + "---|" * len(groups)]
+    for n in names:
+        cells = [f"{score[(n, g)][0]:.3f} ({score[(n, g)][1]})" if (n, g) in score else "-" for g in groups]
+        lines.append(f"| {n} | " + " | ".join(cells) + " |")
     # Per copy type and per class, for every metric.
     copy_types = sorted({images[r["b"]]["stem"] if images[r["a"]]["kind"] == "original" else images[r["a"]]["stem"]
                          for r in copies if "original" in (images[r["a"]]["kind"], images[r["b"]]["kind"])})
@@ -357,9 +425,10 @@ def task_b(images, quality, lines):
               "known to be worse: **compression** (same size, one more lossy: a lower quality of the same codec, "
               "more re-encodings, or lossy against the original), **resolution** (lossless, one smaller), **crop** "
               "(lossless, full size, one shows less), **web copy** (the original against a copy that is smaller and "
-              "compressed). Per indicator: the share of pairs where it ranks the worse one lower (ties count half); "
-              "\"-\" where it has no value for those images.", ""]
-    groups = {"compression": [], "resolution": [], "crop": [], "web copy": []}
+              "compressed), **upscaled** (the original and the copies shrunk and blown back up to full size: the "
+              "same pixel count, less real detail). Per indicator: the share of pairs where it ranks the worse one "
+              "lower (ties count half); \"-\" where it has no value for those images.", ""]
+    groups = {"compression": [], "resolution": [], "crop": [], "web copy": [], "upscaled": []}
     for case in sorted({i["case"] for i in images}):
         pool = [i for i, img in enumerate(images) if img["case"] == case and img["kind"] in ("original", "copy", "crop")]
         for i, j in itertools.combinations(pool, 2):
@@ -367,13 +436,16 @@ def task_b(images, quality, lines):
             if None in (qa, qb):
                 continue
             better = None
-            if sa == sb == 1 and ka == kb == 1 and "upscale" not in images[i]["stem"] + images[j]["stem"]:
+            stems = images[i]["stem"] + images[j]["stem"]
+            if "upscale" in stems:
+                if all(images[k]["kind"] == "original" or images[k]["stem"].startswith("upscale") for k in (i, j)):
+                    better, kind = (i if sa > sb else j), "upscaled"
+            elif sa == sb == 1 and ka == kb == 1:
                 if ca == cb and ca != "lossless" and (qa, -ga) != (qb, -gb) and (qa >= qb) == (-ga >= -gb):
                     better, kind = (i if (qa, -ga) > (qb, -gb) else j), "compression"
                 elif {ca, cb} & {"lossless"} and ca != cb and images[i if ca == "lossless" else j]["kind"] == "original":
                     better, kind = (i if ca == "lossless" else j), "compression"
-            elif ca == cb == "lossless" and ka == kb == 1 and sa != sb and "bilinear" not in images[i]["stem"] + images[j]["stem"] \
-                    and "nearest" not in images[i]["stem"] + images[j]["stem"] and "upscale" not in images[i]["stem"] + images[j]["stem"]:
+            elif ca == cb == "lossless" and ka == kb == 1 and sa != sb and "bilinear" not in stems and "nearest" not in stems:
                 better, kind = (i if sa > sb else j), "resolution"
             elif ca == cb == "lossless" and sa == sb == 1 and ka != kb and "rescaled" not in images[i]["stem"] + images[j]["stem"]:
                 better, kind = (i if ka > kb else j), "crop"
@@ -387,6 +459,7 @@ def task_b(images, quality, lines):
     indicators = [("pixels", lambda v: v["pixels"], 1), ("file size", lambda v: v["size"], 1),
                   ("bytes per pixel", lambda v: v["bpp"], 1), ("JPEG quality estimate", lambda v: v["jpeg_quality"], 1),
                   ("sharpness (Laplacian variance)", lambda v: v["sharpness"], 1),
+                  ("detail (RMS lost when halved)", lambda v: v["detail"], 1),
                   ("AntiDupl blockiness", lambda v: v["blockiness"], -1), ("AntiDupl blurring", lambda v: v["blurring"], -1)]
     lines += ["| Indicator | " + " | ".join(f"{k} ({len(v)} pairs)" for k, v in groups.items()) + " |",
               "|---|" + "---|" * len(groups)]
@@ -458,6 +531,41 @@ def task_c(rows, images, lines):
         lines.append(f"| {stem} | {truth} | {' '.join(est)} | {' '.join(rot) or '-'} |")
 
 
+EXTRA = ["sift-inliers", "sift-matches", "share-a", "share-b", "align-scale", "align-rotation"]
+
+
+def read_rows(out, images):
+    """pairs.csv back into rows (numbers as floats, blanks as ""), and the
+    metric names in its column order."""
+    index = {(img["case"], img["file"]): i for i, img in enumerate(images)}
+    with open(os.path.join(out, "pairs.csv"), encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        header = reader.fieldnames
+        names = header[header.index("changed") + 1:header.index("sift-inliers")]
+        rows = []
+        for r in reader:
+            if (r["case_a"], r["a"]) not in index or (r["case_b"], r["b"]) not in index:
+                continue
+            row = {"a": index[(r["case_a"], r["a"])], "b": index[(r["case_b"], r["b"])],
+                   "class": r["class"], "changed": r["changed"]}
+            for k in names + EXTRA:
+                row[k] = "" if r.get(k, "") == "" else float(r[k])
+            rows.append(row)
+    return rows, names
+
+
+def read_quality(out, images):
+    index = {(img["case"], img["file"]): i for i, img in enumerate(images)}
+    quality = {}
+    for r in csv.DictReader(open(os.path.join(out, "quality.csv"), encoding="utf-8")):
+        i = index.get((r["case"], r["file"]))
+        if i is None:
+            continue
+        quality[i] = {k: (None if r[k] in ("", "None") else float(r[k]))
+                      for k in ("pixels", "size", "bpp", "jpeg_quality", "sharpness", "detail", "blockiness", "blurring")}
+    return quality
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("set")
@@ -467,6 +575,8 @@ def main():
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 2))
     ap.add_argument("--no-slow", action="store_true")
     ap.add_argument("--cases", help="comma-separated case names (default: all)")
+    ap.add_argument("--analysis-only", action="store_true",
+                    help="only rewrite summary.md from pairs.csv and quality.csv in <out>")
     a = ap.parse_args()
     os.makedirs(a.cache, exist_ok=True)
     os.makedirs(a.out, exist_ok=True)
@@ -475,6 +585,24 @@ def main():
     images = load_set(a.set)
     if a.cases:
         images = [img for img in images if img["case"] in a.cases.split(",")]
+    if not a.analysis_only:
+        compute(a, images)
+    rows, names = read_rows(a.out, images)
+    quality = read_quality(a.out, images)
+    lines = ["# Settings study summary", "", f"Generated by `settings_study.py`: {len(images)} images in "
+             f"{len({i['case'] for i in images})} cases, {len(rows)} pairs.", ""]
+    task_a(rows, names, images, lines)
+    task_b(images, quality, lines)
+    task_c(rows, images, lines)
+    with open(os.path.join(a.out, "summary.md"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+    print("summary written", flush=True)
+    return 0
+
+
+def compute(a, images):
+    """Features, every pair's metrics (pairs.csv) and the per-image quality
+    values (quality.csv)."""
     jobs = [(img["path"], *cache_paths(a.cache, img)) for img in images]
     with ProcessPoolExecutor(a.workers) as pool:
         list(pool.map(build_features, jobs, chunksize=1))
@@ -515,25 +643,21 @@ def main():
         r["class"], changed = classes[(r["a"], r["b"])]
         r["changed"] = "" if changed is None else round(changed, 4)
 
-    quality = {}
     core = core_values(a.dll, a.set, sorted({img["case"] for img in images}), tmp) if a.dll else {}
-    for i, img in enumerate(images):
-        f = small[i]
-        bl = core.get(os.path.normcase(os.path.abspath(img["path"])), (None, None))
-        quality[i] = {"pixels": f["pixels"], "size": os.path.getsize(img["path"]), "bpp": f["bpp"],
-                      "jpeg_quality": f["jpeg_quality"], "sharpness": f["sharpness"],
-                      "blockiness": bl[0], "blurring": bl[1]}
+    with ProcessPoolExecutor(a.workers) as pool:
+        details = list(pool.map(sm.detail, [img["path"] for img in images], chunksize=1))
     with open(os.path.join(a.out, "quality.csv"), "w", encoding="utf-8", newline="") as fq:
         w = csv.writer(fq)
-        w.writerow(["case", "file", "kind", "pixels", "size", "bpp", "jpeg_quality", "sharpness", "blockiness", "blurring"])
+        w.writerow(["case", "file", "kind", "pixels", "size", "bpp", "jpeg_quality", "sharpness", "detail",
+                    "blockiness", "blurring"])
         for i, img in enumerate(images):
-            q = quality[i]
-            w.writerow([img["case"], img["file"], img["kind"], q["pixels"], q["size"], q["bpp"], q["jpeg_quality"],
-                        q["sharpness"], q["blockiness"], q["blurring"]])
+            f = small[i]
+            bl = core.get(os.path.normcase(os.path.abspath(img["path"])), (None, None))
+            w.writerow([img["case"], img["file"], img["kind"], f["pixels"], os.path.getsize(img["path"]), f["bpp"],
+                        f["jpeg_quality"], f["sharpness"], details[i], bl[0], bl[1]])
 
     names = metric_names(not a.no_slow)
-    fields = ["case_a", "a", "case_b", "b", "class", "changed"] + names + \
-             ["sift-inliers", "sift-matches", "share-a", "share-b", "align-scale", "align-rotation"]
+    fields = ["case_a", "a", "case_b", "b", "class", "changed"] + names + EXTRA
     with open(os.path.join(a.out, "pairs.csv"), "w", encoding="utf-8", newline="") as fp:
         w = csv.DictWriter(fp, fields, extrasaction="ignore")
         w.writeheader()
@@ -542,15 +666,6 @@ def main():
             out["case_a"], out["case_b"] = images[r["a"]]["case"], images[r["b"]]["case"]
             out["a"], out["b"] = images[r["a"]]["file"], images[r["b"]]["file"]
             w.writerow(out)
-    lines = ["# Settings study summary", "", f"Generated by `settings_study.py`: {len(images)} images in "
-             f"{len({i['case'] for i in images})} cases, {len(rows)} pairs.", ""]
-    task_a(rows, names, images, lines)
-    task_b(images, quality, lines)
-    task_c(rows, images, lines)
-    with open(os.path.join(a.out, "summary.md"), "w", encoding="utf-8", newline="\n") as f:
-        f.write("\n".join(lines) + "\n")
-    print("summary written", flush=True)
-    return 0
 
 
 if __name__ == "__main__":

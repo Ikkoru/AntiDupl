@@ -209,7 +209,9 @@ def derived(original):
     add("scale-50-jpeg-q85", "copy", "50 % Lanczos, JPEG q85 4:2:0", (0.5, 85, 1, 1), lambda im, p: save_jpeg(resized(im, 0.5), p + ".jpg", 85))
     add("scale-25-jpeg-q75", "copy", "25 % Lanczos, JPEG q75 4:2:0", (0.25, 75, 1, 1), lambda im, p: save_jpeg(resized(im, 0.25), p + ".jpg", 75))
     add("upscale-50-x2", "copy", "50 % Lanczos, then back to full size", (0.5, 100, 1, 1),
-        lambda im, p: png(resized(resized(im, 0.5), 2.0).resize(im.size, Image.LANCZOS), p))
+        lambda im, p: png(resized(im, 0.5).resize(im.size, Image.LANCZOS), p))
+    add("upscale-25-x4", "copy", "25 % Lanczos, then back to full size", (0.25, 100, 1, 1),
+        lambda im, p: png(resized(im, 0.25).resize(im.size, Image.LANCZOS), p))
     # Processed copies.
     add("sharpen", "copy", "unsharp mask 1 px 80 %", (1, 100, 1, 1), lambda im, p: png(rgb(im).filter(ImageFilter.UnsharpMask(1, 80, 0)), p))
     add("blur", "copy", "Gaussian blur 1 px", (1, 100, 1, 1), lambda im, p: png(rgb(im).filter(ImageFilter.GaussianBlur(1)), p))

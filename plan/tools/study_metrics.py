@@ -7,8 +7,9 @@ Image features (features(), cached by settings_study.py):
                 pipeline, bit-faithful via adsim) and area, sizes 16-128
     sq256       256 x 256 RGB, area-resampled, aspect ignored like AntiDupl
     hist        HSV histogram, 8 x 8 x 8, normalised
-    hashes      aHash, dHash, pHash, wHash (64 bit), colorhash (from a
-                512 px copy), crop-resistant hash
+    hashes      aHash, dHash, pHash, wHash (64 bit), pHash and dHash with
+                256 bits, colorhash (from a 512 px copy), crop-resistant
+                hash
     sift        SIFT keypoints (row, col) and descriptors on a 512 px grey
                 copy, for alignment
     quality     pixels, bytes per pixel, JPEG quality estimate (from the
@@ -22,6 +23,7 @@ import subprocess
 import imagehash
 import numpy as np
 from PIL import Image
+from scipy import signal
 from skimage import color as skcolor
 from skimage import feature as skfeature
 from skimage import measure as skmeasure
@@ -80,6 +82,19 @@ def longest(im, side):
     return im.resize((max(1, round(im.width * f)), max(1, round(im.height * f))), Image.BOX)
 
 
+HASHES = ("ahash", "dhash", "phash", "whash", "colorhash", "phash-256", "dhash-256")
+
+
+def hashes(small):
+    """The perceptual hashes of a 512 px copy: 64 bits, and pHash and dHash
+    also with 256 bits, the size of Meta's PDQ hash."""
+    return {"ahash": imagehash.average_hash(small).hash.flatten(), "dhash": imagehash.dhash(small).hash.flatten(),
+            "phash": imagehash.phash(small).hash.flatten(), "whash": imagehash.whash(small).hash.flatten(),
+            "colorhash": imagehash.colorhash(small).hash.flatten(),
+            "phash-256": imagehash.phash(small, hash_size=16).hash.flatten(),
+            "dhash-256": imagehash.dhash(small, hash_size=16).hash.flatten()}
+
+
 def features(path):
     im = open_image(path)
     quality = jpeg_quality(im)
@@ -103,9 +118,6 @@ def features(path):
     hist = np.bincount(hsv[:, 0] * 64 + hsv[:, 1] * 8 + hsv[:, 2], minlength=512).astype(np.float64)
     hist /= hist.sum()
     small = longest(im, 512)
-    hashes = {"ahash": imagehash.average_hash(small).hash.flatten(), "dhash": imagehash.dhash(small).hash.flatten(),
-              "phash": imagehash.phash(small).hash.flatten(), "whash": imagehash.whash(small).hash.flatten(),
-              "colorhash": imagehash.colorhash(small).hash.flatten()}
     crh = imagehash.crop_resistant_hash(small)
     g512 = np.asarray(small.convert("L"), dtype=np.float64) / 255
     try:
@@ -120,7 +132,7 @@ def features(path):
     lap = gray.astype(np.float64)
     lap = lap[1:-1, 1:-1] * 4 - lap[:-2, 1:-1] - lap[2:, 1:-1] - lap[1:-1, :-2] - lap[1:-1, 2:]
     return {
-        "planes": planes, "sq256": sq256, "hist": hist, "hashes": hashes, "crh": crh,
+        "planes": planes, "sq256": sq256, "hist": hist, "hashes": hashes(small), "crh": crh,
         "sift_keys": keys, "sift_desc": desc, "sift_shape": g512.shape,
         "pixels": rgb.shape[0] * rgb.shape[1], "shape": rgb.shape[:2],
         "bpp": os.path.getsize(path) / (rgb.shape[0] * rgb.shape[1]),
@@ -192,6 +204,100 @@ def gmsd(a, b):
     c = 170.0
     gms = (2 * gx * gy + c) / (gx * gx + gy * gy + c)
     return float(gms.std() * 100)
+
+
+def _conv_same(x, k):
+    """MATLAB's conv2(x, k, 'same'), which centres an even-sized kernel
+    differently from SciPy's (the HaarPSI reference code's helper)."""
+    return np.rot90(signal.convolve2d(np.rot90(x, 2), np.rot90(k, 2), mode="same"), 2)
+
+
+def haarpsi(a, b):
+    """HaarPSI (Reisenhofer et al. 2018) on 256 x 256 colour, as the authors'
+    reference code computes it: 100 x (1 - similarity)."""
+    c, alpha, scales = 30.0, 4.2, 3
+    mean2 = np.ones((2, 2)) / 4
+
+    def yiq(x):
+        r, g, bl = (x[..., k].astype(np.float64) for k in range(3))
+        return [_conv_same(p, mean2)[::2, ::2] for p in (0.299 * r + 0.587 * g + 0.114 * bl,
+                                                         0.596 * r - 0.274 * g - 0.322 * bl,
+                                                         0.211 * r - 0.523 * g + 0.312 * bl)]
+
+    def haar(y):
+        out = ([], [])  # per orientation, per scale
+        for s in range(1, scales + 1):
+            k = 2.0 ** -s * np.ones((2 ** s, 2 ** s))
+            k[:k.shape[0] // 2] *= -1
+            out[0].append(_conv_same(y, k))
+            out[1].append(_conv_same(y, k.T))
+        return out
+
+    def similar(x, y):
+        return (2 * x * y + c) / (x * x + y * y + c)
+
+    (ya, ia, qa), (yb, ib, qb) = yiq(a), yiq(b)
+    ha, hb = haar(ya), haar(yb)
+    sims, weights = [], []
+    for o in range(2):
+        weights.append(np.maximum(np.abs(ha[o][2]), np.abs(hb[o][2])))
+        sims.append((similar(np.abs(ha[o][0]), np.abs(hb[o][0])) + similar(np.abs(ha[o][1]), np.abs(hb[o][1]))) / 2)
+    sims.append((similar(np.abs(_conv_same(ia, mean2)), np.abs(_conv_same(ib, mean2)))
+                 + similar(np.abs(_conv_same(qa, mean2)), np.abs(_conv_same(qb, mean2)))) / 2)
+    weights.append((weights[0] + weights[1]) / 2)
+    sims, weights = np.stack(sims), np.stack(weights)
+    if weights.sum() == 0:
+        return 0.0
+    v = (weights / (1 + np.exp(-alpha * sims))).sum() / weights.sum()
+    return float(100 * (1 - (np.log(v / (1 - v)) / alpha) ** 2))
+
+
+def _vifp(ref, dist, sigma_nsq=2.0):
+    """Pixel-domain VIF of dist against ref, as sewar and the authors'
+    MATLAB code compute it (Gaussian windows, 'valid' filtering)."""
+    eps = 1e-10
+    num = den = 0.0
+    x, y = ref, dist
+    for scale in range(1, 5):
+        n = 2 ** (4 - scale + 1) + 1
+        g1 = np.exp(-((np.arange(n) - n // 2) ** 2) / (2 * (n / 5) ** 2))
+        g1 /= g1.sum()
+
+        def filt(z):
+            z = signal.convolve(z, g1[:, None], mode="valid", method="direct")
+            return signal.convolve(z, g1[None, :], mode="valid", method="direct")
+
+        if scale > 1:
+            x, y = filt(x)[::2, ::2], filt(y)[::2, ::2]
+        mx, my = filt(x), filt(y)
+        sxx = filt(x * x) - mx * mx
+        syy = filt(y * y) - my * my
+        sxy = filt(x * y) - mx * my
+        sxx[sxx < 0] = 0
+        syy[syy < 0] = 0
+        g = sxy / (sxx + eps)
+        sv = syy - g * sxy
+        flat = sxx < eps
+        g[flat] = 0
+        sv[flat] = syy[flat]
+        sxx[flat] = 0
+        g[syy < eps] = 0
+        sv[syy < eps] = 0
+        neg = g < 0
+        sv[neg] = syy[neg]
+        g[neg] = 0
+        sv[sv <= eps] = eps
+        num += np.log10(1 + g * g * sxx / (sv + sigma_nsq)).sum()
+        den += np.log10(1 + sxx / sigma_nsq).sum()
+    return num / den if den > 0 else 1.0
+
+
+def vifp(a, b):
+    """Pixel-domain VIF (Sheikh and Bovik 2006) on 256 x 256 grey. VIF
+    measures one image against a reference, and neither is the reference
+    here: 100 x (1 - the smaller of both ways round)."""
+    x, y = skcolor.rgb2gray(a) * 255, skcolor.rgb2gray(b) * 255
+    return float(max(0.0, 100 * (1 - min(_vifp(x, y), _vifp(y, x)))))
 
 
 def ciede2000(a, b):
@@ -322,6 +428,17 @@ def ssimulacra2(a_png, b_png):
         except ValueError:
             pass
     return float("nan")
+
+
+def detail(path):
+    """RMS (0-255) of what halving and restoring the size removes from the
+    grey image: the detail finer than half its resolution. An image blown
+    up from a smaller one has little of it, whatever its pixel count."""
+    g = open_image(path).convert("L")
+    small = g.resize((max(1, g.width // 2), max(1, g.height // 2)), Image.BOX)
+    back = np.asarray(small.resize(g.size, Image.BICUBIC), dtype=np.float64)
+    d = np.asarray(g, dtype=np.float64) - back
+    return float(np.sqrt((d * d).mean()))
 
 
 def same_size_png(src_png, size, out_png):

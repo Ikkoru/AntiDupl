@@ -1,6 +1,7 @@
 numpy
 pillow
 scikit-image
+scipy
 imagehash
 ssimulacra2
 piexif
