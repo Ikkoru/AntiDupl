@@ -4,6 +4,7 @@ Usage:
     python core_search.py DLL_DIR USER_DIR SEARCH_DIR [--size N] [--threshold N]
                           [--turbo 0|1] [--algorithm 0|1] [--runs N] [--use-db]
                           [--details] [--collect-threads N] [--transformed]
+                          [--images FILE]
 
 DLL_DIR     folder holding AntiDupl.dll (e.g. bin\\Release of a build)
 USER_DIR    the engine's user folder (settings, image database); created if
@@ -24,6 +25,8 @@ SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
 --collect-threads  number of threads that decode images (timing)
 --transformed      also search rotated and mirrored copies ("Search rotated
             and mirror image dupls")
+--images FILE      also write every image that is in a result, with the
+            core's type, size, blockiness and blurring, as UTF-8 TSV
 
 Prints one line per pair: difference with full precision, the 2-decimal value
 the UI shows, and the two file names; for a pair found as a rotated or mirrored
@@ -108,6 +111,7 @@ def main():
     ap.add_argument("--details", action="store_true")
     ap.add_argument("--collect-threads", type=int)
     ap.add_argument("--transformed", action="store_true")
+    ap.add_argument("--images")
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -174,13 +178,20 @@ def main():
                     sys.exit(f"saving the image database failed: error {err}")
                 core.adClear(h, AD_FILE_IMAGE_DATA_BASE)
             core.adResultSort(h, AD_SORT_BY_DIFFERENCE, 1)
-            start, count = ctypes.c_size_t(0), ctypes.c_size_t(256)
-            results = (ResultW * 256)()
-            core.adResultGetW(h, ctypes.byref(start), results, ctypes.byref(count))
+            results, page_size = [], 256
+            while True:
+                start, count = ctypes.c_size_t(len(results)), ctypes.c_size_t(page_size)
+                page = (ResultW * page_size)()
+                core.adResultGetW(h, ctypes.byref(start), page, ctypes.byref(count))
+                results.extend(page[:count.value])
+                if count.value < page_size:
+                    break
             if a.runs > 1:
                 print(f"-- run {run + 1}")
             images = {}
-            for r in results[:count.value]:
+            values = {}
+            for r in results:
+                values[r.first.path] = r.first
                 if r.type == AD_RESULT_DEFECT_IMAGE:
                     if a.details:
                         defect = DEFECTS[r.defect] if 0 <= r.defect < len(DEFECTS) else str(r.defect)
@@ -188,6 +199,7 @@ def main():
                     continue
                 if r.type != AD_RESULT_DUPL_IMAGE_PAIR:
                     continue
+                values[r.second.path] = r.second
                 images[r.first.path] = describe(r.first)
                 images[r.second.path] = describe(r.second)
                 n1, n2 = os.path.basename(r.first.path), os.path.basename(r.second.path)
@@ -196,6 +208,13 @@ def main():
             if a.details:
                 for path in sorted(images):
                     print(f"  {images[path]}")
+            if a.images:
+                with open(a.images, "w", encoding="utf-8", newline="\n") as f:
+                    f.write("path\ttype\twidth\theight\tblockiness\tblurring\n")
+                    for path in sorted(values):
+                        i = values[path]
+                        kind = IMAGE_TYPES[i.type] if 0 <= i.type < len(IMAGE_TYPES) else str(i.type)
+                        f.write(f"{path}\t{kind}\t{i.width}\t{i.height}\t{i.blockiness}\t{i.blurring}\n")
     finally:
         core.adRelease(h)
     return 0
