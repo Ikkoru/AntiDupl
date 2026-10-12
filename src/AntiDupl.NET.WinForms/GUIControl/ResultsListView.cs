@@ -282,10 +282,30 @@ namespace AntiDupl.NET.WinForms
 
         public void MakeAction(CoreDll.LocalActionType action, CoreDll.TargetType target)
         {
+            DecisionLog.Action(action.ToString(), target.ToString(), ActionResults(target), m_currentRowIndex, m_results.Length, m_coreOptions);
             m_makeAction = true;
             ProgressForm progressForm = new ProgressForm(action, target, m_core, m_options, m_coreOptions, m_mainSplitContainer);
             progressForm.Execute();
             m_makeAction = false;
+        }
+
+        // The results an action with this target applies to.
+        private List<CoreResult> ActionResults(CoreDll.TargetType target)
+        {
+            List<CoreResult> results = new List<CoreResult>();
+            if (target == CoreDll.TargetType.Current)
+            {
+                CoreResult current = GetCurrentResult();
+                if (current != null)
+                    results.Add(current);
+            }
+            else
+            {
+                for (int i = 0; i < Rows.Count && i < m_results.Length; i++)
+                    if (((DataGridViewCustomRow)Rows[i]).selected)
+                        results.Add(m_results[i]);
+            }
+            return results;
         }
 
         public void RefreshResults()
@@ -301,6 +321,8 @@ namespace AntiDupl.NET.WinForms
         /// <param name="newFileName">Новый путь</param>
         public void RenameCurrent(CoreDll.RenameCurrentType renameCurrentType, string newFileName)
         {
+            DecisionLog.Action("Rename" + renameCurrentType.ToString(), CoreDll.TargetType.Current.ToString(),
+                ActionResults(CoreDll.TargetType.Current), m_currentRowIndex, m_results.Length, m_coreOptions, newFileName);
             m_makeAction = true;
             ProgressForm progressForm = new ProgressForm(renameCurrentType, newFileName, m_core, m_options, m_coreOptions, m_mainSplitContainer);
             progressForm.Execute();
@@ -825,6 +847,8 @@ namespace AntiDupl.NET.WinForms
                     m_core.SetCurrent(-1);
                 }
                 m_currentRowIndex = index;
+                if (index < m_results.Length)
+                    DecisionLog.View(m_results[index], index, m_results.Length);
 
                 if (m_firstSelectedRowIndex >= Rows.Count)
                     m_firstSelectedRowIndex = m_currentRowIndex;

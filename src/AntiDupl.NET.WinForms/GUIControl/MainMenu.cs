@@ -314,12 +314,14 @@ namespace AntiDupl.NET.WinForms
 
         public void UndoAction(object sender, EventArgs e)
         {
+            DecisionLog.Event("undo");
             ProgressForm progressForm = new ProgressForm(ProgressForm.Type.Undo, m_core, m_options, m_coreOptions, m_mainSplitContainer);
             progressForm.Execute();
         }
 
         public void RedoAction(object sender, EventArgs e)
         {
+            DecisionLog.Event("redo");
             ProgressForm progressForm = new ProgressForm(ProgressForm.Type.Redo, m_core, m_options, m_coreOptions, m_mainSplitContainer);
             progressForm.Execute();
         }
