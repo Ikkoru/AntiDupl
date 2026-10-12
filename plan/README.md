@@ -73,4 +73,5 @@ Two practical traps: the C# build events call `.cmd` scripts with unquoted paths
 | [04-dark-mode.md](04-dark-mode.md) | dark mode |
 | [05-metadata-merge.md](05-metadata-merge.md) | delete-and-keep-metadata (AI metadata, ExifTool) |
 | [06-stretch-and-ameliorations.md](06-stretch-and-ameliorations.md) | QuantSmooth spec, other improvements |
+| [07-settings-study.md](07-settings-study.md) | reduced size, grey/colour and resampling per algorithm, measured on the user's images |
 | [tools/](tools/README.md) | reproduction scripts, experiment, Butteraugli harness, ExifTool config |
