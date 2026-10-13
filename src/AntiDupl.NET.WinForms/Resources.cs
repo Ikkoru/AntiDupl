@@ -50,21 +50,20 @@ namespace AntiDupl.NET.WinForms
             return path;
         }
 
+        /// <summary>
+        /// The settings folder when none is given with -s. Personal build:
+        /// the "user" folder next to the program, or null when there is
+        /// none. The shared %LOCALAPPDATA%\AntiDupl.NET\user belongs to the
+        /// installed release, which can't read what this build writes, so
+        /// this build never falls back on it.
+        /// </summary>
         static public string GetDefaultUserPath()
         {
 #if PUBLISH
             return CreateIfNotExists(System.IO.Path.Combine(Application.StartupPath, "user"));
 #else
-            try
-            {
-                return CreateIfNotExists(System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "AntiDupl.NET", "user"));
-            }
-            catch
-            {
-                return CreateIfNotExists(System.IO.Path.Combine(Application.StartupPath, "user"));
-            }
+            string portable = System.IO.Path.Combine(Application.StartupPath, "user");
+            return Directory.Exists(portable) ? portable : null;
 #endif
         }
 

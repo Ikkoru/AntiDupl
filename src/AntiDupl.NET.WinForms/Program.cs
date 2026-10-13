@@ -49,6 +49,15 @@ namespace AntiDupl.NET.WinForms
                 else
                 {
                     Resources.UserPath = Resources.GetDefaultUserPath();
+                    if (Resources.UserPath == null)
+                    {
+                        MessageBox.Show(string.Format("This build of AntiDupl keeps its settings in a folder named " +
+                            "\"user\" next to the program, or in the folder given with -s <folder>.\n\n" +
+                            "There is no \"user\" folder in\n{0}\nso it doesn't start: it won't use the settings " +
+                            "of another installed AntiDupl.", Application.StartupPath),
+                            Application.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
                 }
                 Resources.Strings.Initialize();
                 Application.EnableVisualStyles();
