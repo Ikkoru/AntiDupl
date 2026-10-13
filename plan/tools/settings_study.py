@@ -65,7 +65,8 @@ EDIT_CLASS = {"sign": "edit-minor", "bar": "edit-minor", "mosaic": "edit-medium"
 CLEAN = {"original", "copy"}
 VERSIONS = {"variant", "step", "edit"}
 # Kinds of difference of the derived images, by file stem.
-GROUPS = [("compression", lambda s: s.startswith(("jpeg-", "webp-", "avif-", "jxl-"))),
+GROUPS = [("shifted", lambda s: "shifted" in s),  # a 3 px crop: misaligns every pixel-wise comparison
+          ("compression", lambda s: s.startswith(("jpeg-", "webp-", "avif-", "jxl-"))),
           ("resolution", lambda s: s.startswith("scale-") and "jpeg" not in s),
           ("web copy", lambda s: s.startswith("scale-") and "jpeg" in s),
           ("upscaled", lambda s: s.startswith("upscale-")),
