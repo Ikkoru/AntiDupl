@@ -471,17 +471,24 @@ def effective_quality(img, q, history):
     return 100.0 if codec_of(img) == "lossless" else None
 
 
-def better_copy(i, j, images, quality, history=True):
+def better_copy(i, j, images, quality, history=True, learned=None):
     """Of two images of the same picture, the one judged better: more
     pixels (over 0.5 % apart); else the higher JPEG-equivalent quality
     (over 2 apart); at the same quality, both lossless, clearly more detail
     (an upscaled copy has less) and then the larger file; at the same lossy
     quality the smaller file, the one converted fewer times; a lossless
-    file over one whose quality can't be read; else the larger file."""
+    file over one whose quality can't be read; else the larger file.
+    learned = (score name, margin): where the JPEG-equivalent quality
+    doesn't decide, a no-reference score (higher = better) apart by more
+    than the margin decides first."""
     qi, qj = quality[i], quality[j]
     if abs(qi["pixels"] - qj["pixels"]) > 0.005 * max(qi["pixels"], qj["pixels"]):
         return i if qi["pixels"] > qj["pixels"] else j
     ei, ej = effective_quality(images[i], qi, history), effective_quality(images[j], qj, history)
+    decided = ei is not None and ej is not None and abs(ei - ej) > 2
+    if learned and not decided and qi.get(learned[0]) is not None and qj.get(learned[0]) is not None \
+            and abs(qi[learned[0]] - qj[learned[0]]) > learned[1]:
+        return i if qi[learned[0]] > qj[learned[0]] else j
     if ei is not None and ej is not None:
         if abs(ei - ej) > 2:
             return i if ei > ej else j
@@ -561,6 +568,8 @@ def task_b(images, quality, lines):
                   ("sharpness (Laplacian variance)", lambda v: v["sharpness"], 1),
                   ("detail (RMS lost when halved)", lambda v: v["detail"], 1),
                   ("AntiDupl blockiness", lambda v: v["blockiness"], -1), ("AntiDupl blurring", lambda v: v["blurring"], -1)]
+    indicators += [(f"{n} (no-reference, central 1024 px)", lambda v, n=n: v.get(n), -1 if n in LOWER_BETTER else 1)
+                   for n in EXTRA_QUALITY]
     lines += ["| Indicator | " + " | ".join(f"{k} ({len(v)} pairs)" for k, v in groups.items()) + " |",
               "|---|" + "---|" * len(groups)]
     for name, get, sign in indicators:
@@ -575,17 +584,22 @@ def task_b(images, quality, lines):
                 score += 1.0 if sign * x > sign * y else 0.5 if x == y else 0.0
             cells.append(f"{100 * score / n:.0f} % ({n})" if n else "-")
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
-    for history, label in ((False, "**rule** of `better_copy`, the file's format and JPEG table only"),
-                           (True, "**rule** of `better_copy` with the JPEG history")):
+    rules = [(False, None, "**rule** of `better_copy`, the file's format and JPEG table only"),
+             (True, None, "**rule** of `better_copy` with the JPEG history")]
+    if "topiq-nr" in EXTRA_QUALITY:
+        rules.append((True, LEARNED, "**rule** with the JPEG history and TOPIQ-NR deciding ties (by over "
+                      f"{LEARNED[1]})"))
+    for history, learned, label in rules:
         cells = []
         for k, pairs in groups.items():
-            right = sum(1 for good, bad in pairs if better_copy(good, bad, images, quality, history) == good)
+            right = sum(1 for good, bad in pairs if better_copy(good, bad, images, quality, history, learned) == good)
             cells.append(f"{100 * right / len(pairs):.0f} % ({right} of {len(pairs)})" if pairs else "-")
         lines.append(f"| {label} | " + " | ".join(cells) + " |")
-    wrong = [(images[g]["case"], images[g]["stem"], images[b]["stem"]) for k, pairs in groups.items()
-             for g, b in pairs if better_copy(g, b, images, quality, True) != g]
-    lines += ["", "Pairs the rule with the JPEG history gets wrong (case, better, worse): "
-              + ("; ".join(" ".join(w) for w in wrong) if wrong else "none") + "."]
+    for history, learned, label in rules[1:]:
+        wrong = [(images[g]["case"], images[g]["stem"], images[b]["stem"]) for k, pairs in groups.items()
+                 for g, b in pairs if better_copy(g, b, images, quality, history, learned) != g]
+        lines += ["", f"Pairs the {label.replace('**', '')} gets wrong (case, better, worse): "
+                  + ("; ".join(" ".join(w) for w in wrong) if wrong else "none") + "."]
 
 
 def task_c(rows, images, lines):
@@ -713,7 +727,28 @@ def read_quality(out, images):
         quality[i] = {k: (None if r.get(k, "") in ("", "None") else float(r[k]))
                       for k in ("pixels", "size", "bpp", "jpeg_quality", "sharpness", "detail", "history_q",
                                 "history_n", "blockiness", "blurring")}
+    # Per-image values from other tools (embed_metrics.py --nr):
+    # quality-*.csv, joined on the image; their names in EXTRA_QUALITY.
+    EXTRA_QUALITY.clear()
+    for extra in sorted(f for f in os.listdir(out) if f.startswith("quality-") and f.endswith(".csv")):
+        with open(os.path.join(out, extra), encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            more = reader.fieldnames[2:]
+            EXTRA_QUALITY.extend(more)
+            for r in reader:
+                i = index.get((r["case"], r["file"]))
+                if i is not None and i in quality:
+                    quality[i].update({k: None if r[k] == "" else float(r[k]) for k in more})
     return quality
+
+
+EXTRA_QUALITY = []
+# No-reference scores where a lower value means a better image.
+LOWER_BETTER = {"niqe", "brisque"}
+# The learned tie-breaker of better_copy: the score and the difference it
+# must exceed (chosen on this set: from 0.03 up it fixes fewer lossy-history
+# pairs, at 0.01 and below it breaks compression pairs).
+LEARNED = ("topiq-nr", 0.02)
 
 
 def main():

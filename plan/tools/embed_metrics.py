@@ -5,13 +5,14 @@ full-reference differences (x 100).
 Usage: <python with torch, torchvision, timm and transformers>
            embed_metrics.py <cache> <out> [--siglip FILE] [--sscd FILE]
            [--dinov2 FILE] [--lpips] [--dists] [--torch-home DIR]
-           [--pylib DIR]
+           [--pylib DIR ...] [--nr MODELS --set SET]
 
 Reads the pairs from <out>/pairs.csv and the 512 px working copies from
 <cache> (both written by settings_study.py), and writes
-<out>/pairs-embed.csv with a column per metric asked for, which
-settings_study.py joins to the other metrics. Nothing is fetched from the
-network: every model comes from a file named here.
+<out>/pairs-embed.csv with a column per pair metric asked for, and with
+--nr <out>/quality-nr.csv with no-reference quality per image; both are
+joined by settings_study.py. Nothing is fetched from the network: every
+model comes from a file named here.
 
 --siglip  Google's SigLIP so400m-patch14-384 vision tower (the file ComfyUI
           loads as a CLIP vision model), in the transformers layout;
@@ -28,6 +29,11 @@ network: every model comes from a file named here.
           folder) and torchvision's ImageNet weights in
           <torch-home>/hub/checkpoints (alexnet-owt-7be5be79.pth,
           vgg16-397923af.pth).
+--nr      MUSIQ and TOPIQ-NR (KonIQ-10k checkpoints) and NIQE through the
+          `pyiqa` package, BRISQUE through OpenCV's quality module; the
+          folder holds musiq_koniq_ckpt-e95806b9.pth,
+          cfanet_nr_koniq_res50-9a73138b.pth, niqe_modelparameters.mat,
+          brisque_model_live.yml and brisque_range_live.yml.
 """
 import argparse
 import csv
@@ -102,6 +108,64 @@ def dinov2(path, device):
     return embed
 
 
+NR_LOWER_BETTER = {"niqe", "brisque"}
+
+
+def open_full(path):
+    """The file's pixels at full size (JPEG XL through libjxl's djxl)."""
+    if not path.lower().endswith(".jxl"):
+        return Image.open(path).convert("RGB")
+    import subprocess
+    import tempfile
+    djxl = os.path.join(os.environ.get("LIBJXL", ""), "djxl.exe")
+    with tempfile.TemporaryDirectory() as tmp:
+        out = os.path.join(tmp, "decoded.png")
+        subprocess.run([djxl, path, out, "--quiet"], check=True, capture_output=True)
+        return Image.open(out).convert("RGB")
+
+
+def no_reference(set_dir, files, device, models):
+    """Per image, no-reference quality on a central 1024 px crop at full
+    resolution, where compression shows: MUSIQ and TOPIQ (both trained on
+    KonIQ-10k ratings; higher is better), NIQE and BRISQUE (lower is
+    better). Returns {(case, file): {name: score}}."""
+    import types
+
+    import cv2
+    import torch
+    # TOPIQ's module imports a face-alignment helper used only for face
+    # crops (align_crop_face), which these images never take.
+    for name in ("facexlib", "facexlib.utils", "facexlib.utils.face_restoration_helper"):
+        sys.modules.setdefault(name, types.ModuleType(name))
+    sys.modules["facexlib.utils.face_restoration_helper"].FaceRestoreHelper = object
+    from pyiqa.archs.musiq_arch import MUSIQ
+    from pyiqa.archs.niqe_arch import NIQE
+    from pyiqa.archs.topiq_arch import CFANet
+    nets = {
+        "musiq": MUSIQ(pretrained_model_path=os.path.join(models, "musiq_koniq_ckpt-e95806b9.pth")),
+        "topiq-nr": CFANet(semantic_model_name="resnet50", model_name="cfanet_nr_koniq_res50", use_ref=False,
+                           backbone_pretrain=False,
+                           pretrained_model_path=os.path.join(models, "cfanet_nr_koniq_res50-9a73138b.pth")),
+        "niqe": NIQE(pretrained_model_path=os.path.join(models, "niqe_modelparameters.mat")),
+    }
+    nets = {n: m.to(device).eval() for n, m in nets.items()}
+    brisque = (os.path.join(models, "brisque_model_live.yml"), os.path.join(models, "brisque_range_live.yml"))
+    out = {}
+    for case, file in files:
+        im = open_full(os.path.join(set_dir, case, file))
+        w, h = im.size
+        side = min(1024, w, h)
+        x0, y0 = (w - side) // 2, (h - side) // 2
+        part = im.crop((x0, y0, x0 + side, y0 + side))
+        x = as_tensor(part).to(device)
+        with torch.no_grad():
+            scores = {n: float(m(x).flatten()[0]) for n, m in nets.items()}
+        bgr = np.ascontiguousarray(np.asarray(part)[..., ::-1])
+        scores["brisque"] = float(cv2.quality.QualityBRISQUE_compute(bgr, *brisque)[0])
+        out[(case, file)] = scores
+    return out
+
+
 def full_reference(names, device):
     """name -> function(a, b) on batches of 256 x 256 tensors in [0, 1]."""
     import torch
@@ -134,12 +198,16 @@ def main():
     ap.add_argument("--lpips", action="store_true")
     ap.add_argument("--dists", action="store_true")
     ap.add_argument("--torch-home", help="folder holding hub/checkpoints with torchvision's weights")
-    ap.add_argument("--pylib", help="folder with the lpips and DISTS_pytorch packages")
+    ap.add_argument("--pylib", action="append", default=[],
+                    help="a package folder (lpips, DISTS_pytorch, pyiqa, OpenCV); repeatable")
+    ap.add_argument("--nr", metavar="MODELS",
+                    help="no-reference quality per image, models from this folder (quality-nr.csv); needs --set")
+    ap.add_argument("--set", help="the sample set (for --nr: the files at full size)")
     a = ap.parse_args()
     if a.torch_home:
         os.environ["TORCH_HOME"] = a.torch_home
-    if a.pylib:
-        sys.path.insert(0, a.pylib)
+    for p in reversed(a.pylib):
+        sys.path.insert(0, p)
     import torch
     device = "cuda" if torch.cuda.is_available() else "cpu"
     with open(os.path.join(a.out, "pairs.csv"), encoding="utf-8") as f:
@@ -172,12 +240,22 @@ def main():
                     values.extend((100 * fn(x, y)).cpu().tolist())
             columns[name] = values
             print(f"{name}: {len(values)} pairs on {device}", flush=True)
-    with open(os.path.join(a.out, "pairs-embed.csv"), "w", encoding="utf-8", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["case_a", "a", "case_b", "b", *columns])
-        for k, (ca, fa, cb, fb) in enumerate(pairs):
-            w.writerow([ca, fa, cb, fb, *(columns[n][k] for n in columns)])
-    print(f"{len(pairs)} pairs written", flush=True)
+    if columns:
+        with open(os.path.join(a.out, "pairs-embed.csv"), "w", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["case_a", "a", "case_b", "b", *columns])
+            for k, (ca, fa, cb, fb) in enumerate(pairs):
+                w.writerow([ca, fa, cb, fb, *(columns[n][k] for n in columns)])
+        print(f"{len(pairs)} pairs written", flush=True)
+    if a.nr:
+        scores = no_reference(a.set, files, device, a.nr)
+        names = list(next(iter(scores.values())))
+        with open(os.path.join(a.out, "quality-nr.csv"), "w", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["case", "file", *names])
+            for (case, file), s in scores.items():
+                w.writerow([case, file, *(s[n] for n in names)])
+        print(f"{len(scores)} images scored ({', '.join(names)})", flush=True)
     return 0
 
 

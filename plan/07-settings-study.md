@@ -47,6 +47,7 @@ Algorithms, all as a difference (0 = identical):
 * Full-reference metrics on 256 × 256 copies: windowed SSIM (mean, and the worst 32-px tile), MS-SSIM, GMSD, HaarPSI, VIF, CIEDE2000, PSNR, and the learned LPIPS (AlexNet) and DISTS. Butteraugli and SSIMULACRA2 (libjxl's tools) at 512 and 1024 px.
 * Colour histograms; perceptual hashes (aHash, dHash, pHash, wHash with 64 bits, pHash and dHash with 256 bits, colorhash, the crop-resistant hash, OpenCV's block mean, Marr–Hildreth, radial variance and colour moment hashes); the share of keypoints left unmatched.
 * Neural image embeddings, 1 − cosine similarity: SigLIP (a CLIP-like model), DINOv2 ViT-S/14, and SSCD (Meta's model trained for copy detection).
+* For the worse copy, also per image: the JPEG trace in the pixels (below), and no-reference quality scores: the learned TOPIQ-NR and MUSIQ (trained on KonIQ-10k ratings), NIQE and BRISQUE.
 
 ## Which algorithm finds which kind of copy
 
@@ -126,14 +127,36 @@ Pairs of the same picture that differ in one way, so one is known to be worse: *
 | detail lost when halved | 62 % | 7 % | 29 % | 0 % | 100 % | 81 % |
 | AntiDupl blockiness | 95 % | 56 % | 45 % | 88 % | 33 % | 85 % |
 | AntiDupl blurring | 38 % | 34 % | 66 % | 0 % | 100 % | 63 % |
+| TOPIQ-NR (learned, no-reference) | 96 % | 5 % | 47 % | 25 % | 100 % | 94 % |
+| MUSIQ (learned, no-reference) | 92 % | 15 % | 33 % | 38 % | 100 % | 98 % |
+| NIQE (no-reference) | 65 % | 26 % | 33 % | 12 % | 67 % | 71 % |
+| BRISQUE (no-reference) | 45 % | 6 % | 48 % | 0 % | 42 % | 31 % |
 | **the rule**, the file's format and JPEG table only | 100 % | 100 % | 100 % | 100 % | 100 % | 33 % |
 | **the rule** with the JPEG trace | 100 % | 100 % | 100 % | 100 % | 100 % | 83 % |
+| **the rule** with the JPEG trace and TOPIQ-NR deciding ties | 100 % | 100 % | 100 % | 100 % | 100 % | 96 % |
+
+The no-reference scores are taken on a central 1024 px crop at full size, where compression shows; between sizes (resolution, crops, web copies) they compare different amounts of the picture and mean nothing.
 
 **The rule** (`better_copy` in `tools/settings_study.py`): **more pixels** is better (more than 0.5 % apart); else the higher **effective JPEG quality** (more than 2 apart); at the same quality, both lossless, **clearly more detail** (25 % or more; it unmasks upscaled copies) and then the larger file; at the same lossy quality the **smaller file**, the one converted fewer times (a JPEG re-saved three times at q85 is a slightly larger file than the one saved once); a lossless file over one whose quality can't be read (WebP, AVIF, JPEG XL); else the larger file.
 
 **Lossy history.** A JPEG saved as PNG, or a q45 JPEG re-saved at q95, carries a lossless format or a high quality setting while showing the losses of the first save, and the file's own format and table pick it over better files (33 % right). The pixels still show the first save: a JPEG rounds each 8 × 8 block's DCT coefficients to multiples of its quantisation steps, and decoding or re-saving at a finer step keeps them near those multiples (Fan and de Queiroz 2003). `jpeg_history` in `tools/study_metrics.py` finds the block grid from the pixels (it survives a crop that shifts it), finds per coefficient position the largest step the coefficients cluster on, and gives the IJG quality whose table has those steps: the strongest JPEG compression the pixels went through, whatever the format now. On every JPEG step in the set, q30 to q90, as JPEG, as PNG, shifted by 3 px, or re-saved at q95, it reads the quality within 2.2; it finds no trace in any file without a JPEG step; a q95 or q100 JPEG leaves too fine a trace (its file's table says so anyway). It takes about 0.4 s per image on a central 1536 px crop. With it, the rule gets 83 % of the lossy-history pairs right, and still all the others.
 
-**What it can't see: a lossy step that isn't JPEG.** All 9 pairs the rule still gets wrong are the PNG made from a WebP q50 file, against the q75 and q90 WebP copies (and, in one illustration, against the original, whose PNG is the smaller file): it looks like a clean lossless file. A JPEG re-saved as WebP also loses its JPEG trace. WebP (like AVIF) codes the difference from a prediction out of neighbouring pixels and smooths block edges afterwards, so its pixels keep no grid of steps to read. Re-encoding shows something instead: re-saving a picture as WebP at each quality and measuring the change, a file that was WebP at quality Q changes little for every quality from Q up (the q50 one: 1.6 → 1.5 RMS from q55 to q75), while a picture never saved as WebP keeps changing (the original: 2.6 → 2.3). That needs calibrating on more pictures before it can join the rule.
+**What it can't see: a lossy step that isn't JPEG.** All 9 pairs the rule still gets wrong are the PNG made from a WebP q50 file, against the q75 and q90 WebP copies (and, in one illustration, against the original, whose PNG is the smaller file): it looks like a clean lossless file. A JPEG re-saved as WebP also loses its JPEG trace. WebP (like AVIF) codes the difference from a prediction out of neighbouring pixels and smooths block edges afterwards, so its pixels keep no grid of steps to read. Two ways round it:
+
+* **A learned quality score as the tie-breaker.** Where the effective JPEG quality doesn't decide (it is unknown for one file, or the same for both), TOPIQ-NR decides when the two scores differ by more than 0.02: the rule then gets 50 of the 52 lossy-history pairs right and still every other pair; the two misses are q75 WebP against the PNG of the q50 one. The margin was chosen on this set (from 0.03 up fewer lossy-history pairs are fixed; at 0.01 and below compression pairs break), so it needs checking on the next sets. MUSIQ ranks as well as an indicator but makes a worse tie-breaker; NIQE and BRISQUE are weak. TOPIQ is a ResNet-50 network (181 MB): fine for the study, heavy for AntiDupl.
+* **A WebP trace found by re-encoding.** Re-saving a picture as WebP at each quality and measuring the change, a file that was WebP at quality Q changes little for every quality from Q up (the q50 one: 1.6 → 1.5 RMS from q55 to q75), while a picture never saved as WebP keeps changing (the original: 2.6 → 2.3). Calibration, before it can join the rule:
+  1. Samples: WebP copies of many pictures at q20–95 in steps of 5, made with the encoders real files come from (libwebp's `cwebp` at methods 4 and 6, with and without `-sharp_yuv`, and Pillow's), their PNG conversions, JPEG→WebP and WebP→JPEG chains, and pictures never saved as WebP (originals, JPEG, AVIF, JPEG XL, resized, upscaled, processed); later real WebPs from the user's archive whose source quality is known.
+  2. Per file, the change curve at each re-encode quality on a central crop; WebP's 16 px macroblock grid moves with a crop, so the curve is taken at each of the 16 offsets and the flattest kept, as the JPEG trace finds its grid.
+  3. From the curve, where it flattens and how flat it stays, against the steady fall of a never-WebP picture; a threshold or a small logistic model on those two numbers, validated leaving one picture out at a time, so the content of a picture can't teach the model its own answer.
+  4. Acceptance: no trace found on a never-WebP file (a false trace makes the rule prefer a worse file), the quality within about 5, and the failing pairs here right.
+
+**jpegQS.** QuantSmooth recovers precision from a JPEG's coefficients within its quantisation steps, so the better copy of a JPEG is also the one jpegQS improves most. Run on the set's JPEG copies (default `-q 3`, and `-q 6`, 3 iterations; SSIMULACRA2 against the original on a central 1024 px crop):
+
+* First-save JPEGs from q45 to q90 gain a median 1.1 points with `-q 3` and 1.6 with `-q 6`, at most 3.3; a few lose up to 1. Nothing at q100; at q30 `-q 3` loses up to 3 points in two of the four illustrations, `-q 6` gains up to 3. A gain of that size lifts a q60 file to about q65: here it never reorders copies 10 or more quality apart.
+* The q45 file re-saved at q95 gains nothing (0.0–0.2): jpegQS can only undo the last save, as its README says. Re-saving at the same quality (q85 three times) keeps most of the gain.
+* The PNG of a q60 JPEG, re-encoded at q60 with the same encoder, gives back the JPEG's coefficients almost exactly (0.1–1.6 % of pixels differ, by chroma rounding), and jpegQS gains on it within 0.8 points of the original JPEG: the PNG hasn't lost the jpegQS option, given the quality read from its trace and the encoder's tables.
+
+So which JPEG gains most can be predicted without running it: the gain comes from the file's own table (the coarser, the more, down to about q45), and nothing comes back from an earlier, stronger save that the JPEG trace still shows. A file whose trace is stronger than its table has already lost what jpegQS could give back: the rule's effective quality (the lower of the two) ranks it right. For the other lossy formats there is no such tool: WebP, AVIF, HEIC and JPEG XL's own lossy mode filter block edges while decoding, so the decoded picture is already smoothed, and the AI artifact removers that work on any picture invent detail instead of staying within the file's steps. The exception is a JPEG XL made from a JPEG by lossless transcoding (`cjxl`'s default for JPEG input): it decodes back to the identical JPEG file (checked on the q60 copy; the JPEG XL is 23 % smaller), so jpegQS applies to it unchanged.
 
 ## Crops
 
@@ -153,20 +176,19 @@ Matching every pair of a large collection is too slow even at 1 ms, so a crop se
 
 ## Conclusions
 
+* **With today's build** (grey, bilinear; SSIM or mean square; whole-percent thresholds): SSIM at 32 px sorts copies before versions best (AUC 0.959, against 0.938 at 128 px) and at 1 % returns every copy; mean square returns fewer versions at 1–2 % but misses processed copies.
 * **T10:** area resampling for every algorithm's reduced images.
 * **T11:** local colour difference at 64 px as the default: the best cheap algorithm for every plain copy, compression and upscaling included.
 * **T12:** Butteraugli as a slow second look at the candidates, at 512 px (1024 px for copies under a quarter of the size).
-* **Crops:** a new kind of search in two stages (above).
-* **The worse copy:** the rule above with the JPEG trace, when hints are reworked ([06 § S4](06-stretch-and-ameliorations.md) A3); the JPEG quality, its trace and bytes per pixel as columns (A2) would show the user the same evidence.
-* Hashes, embeddings (SSCD, DINOv2, SigLIP) and the learned full-reference metrics (LPIPS, DISTS) are no help in telling copies from versions.
+* **Crops** (T19): a new kind of search in two stages (above).
+* **The worse copy:** the rule above with the JPEG trace, when hints are reworked ([06 § S4](06-stretch-and-ameliorations.md) A3); the JPEG quality, its trace and bytes per pixel as columns (A2) would show the user the same evidence. For lossy steps that aren't JPEG: the WebP trace once calibrated, or a learned score such as TOPIQ-NR as the tie-breaker.
+* Hashes, embeddings (SSCD, DINOv2, SigLIP) and the learned full-reference metrics (LPIPS, DISTS) are no help in telling copies from versions; the embeddings are the candidate finders for crops.
 
 ## Candidates not tested yet
 
 | Candidate | What it might add | Needs |
 |---|---|---|
 | WebP/AVIF history by re-encoding (above) | the lossy steps the JPEG trace can't see | calibration on more pictures; nothing to download |
-| BRISQUE, NIQE (OpenCV's quality module) | a no-reference quality score for the rule's last step | their model files from OpenCV's contrib repository (small downloads) |
-| learned no-reference quality (MUSIQ, TOPIQ via `pyiqa`) | the same, trained on human ratings | `pyiqa` (8 MB) and model files (about 100–300 MB) |
 | a keypoint index (ORB descriptors in an inverted file or hash tables) | crop candidates without an embedding | design work |
 
 ## Limits and growing the set
@@ -176,4 +198,4 @@ Matching every pair of a large collection is too slow even at 1 ms, so a crop se
 
 ## Tools
 
-`tools/study_set.py` builds or extends the set from a config naming archive files (the config stays outside this repository: it names files in the user's archive), `tools/settings_study.py` computes every metric of `tools/study_metrics.py` on every pair and writes the tables of `summary.md` (`--analysis-only` redoes them from the saved values), `tools/embed_metrics.py` adds the neural metrics; see [tools/README.md](tools/README.md).
+`tools/study_set.py` builds or extends the set from a config naming archive files (the config stays outside this repository: it names files in the user's archive), `tools/settings_study.py` computes every metric of `tools/study_metrics.py` on every pair and writes the tables of `summary.md` (`--analysis-only` redoes them from the saved values), `tools/embed_metrics.py` adds the neural metrics and the no-reference scores, `tools/qs_check.py` measures jpegQS on the JPEG copies, `tools/webp_reencode.py` prints the WebP re-encoding curves; see [tools/README.md](tools/README.md).
