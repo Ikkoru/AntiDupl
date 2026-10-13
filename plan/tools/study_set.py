@@ -20,8 +20,10 @@ kind: original, variant, step, copy, crop, overlay, gray, transform, edit.
 The last four columns describe how a derived file was made from the
 original, for the "which copy is worse" task: scale (1 = full size, the
 detail kept even when resized back up), quality (JPEG/WebP/AVIF quality,
-100 = lossless, or "jxl-d<distance>"), generations (times encoded), kept
-(share of the original's area still in the picture). Existing
+100 = lossless, or "jxl-d<distance>"; for a file converted again after a
+lossy step, the lowest quality on the way), generations (lossy encodings
+on the way), kept (share of the original's area still in the picture).
+Existing
 files are kept unless --rebuild; the manifest is rewritten each run.
 
 The set is not disposable: the user's hand-added cases can't be rebuilt,
@@ -60,6 +62,18 @@ def save_jpeg(im, path, quality, subsampling=2, generations=1):
         data = jpeg_bytes(Image.open(io.BytesIO(data)), quality, subsampling)
     with open(path, "wb") as f:
         f.write(data)
+
+
+def decoded_jpeg(im, quality, subsampling=2):
+    """The pixels of `im` after a JPEG encode with save_jpeg's settings (so
+    the same as the set's jpeg-q<quality> file)."""
+    return Image.open(io.BytesIO(jpeg_bytes(im, quality, subsampling))).convert("RGB")
+
+
+def decoded_webp(im, quality):
+    buf = io.BytesIO()
+    rgb(im).save(buf, "WEBP", quality=quality, method=6)
+    return Image.open(io.BytesIO(buf.getvalue())).convert("RGB")
 
 
 def resized(im, factor, method=Image.LANCZOS):
@@ -217,6 +231,19 @@ def derived(original):
     add("blur", "copy", "Gaussian blur 1 px", (1, 100, 1, 1), lambda im, p: png(rgb(im).filter(ImageFilter.GaussianBlur(1)), p))
     add("brighter", "copy", "brightness +5 %", (1, 100, 1, 1), lambda im, p: png(ImageEnhance.Brightness(rgb(im)).enhance(1.05), p))
     add("saturated", "copy", "saturation +15 %", (1, 100, 1, 1), lambda im, p: png(ImageEnhance.Color(rgb(im)).enhance(1.15), p))
+    # Lossy history: a lossy copy converted again, so the file's format or
+    # quality setting no longer says how much was lost.
+    add("jpeg-q60-to-png", "copy", "JPEG q60 4:2:0, decoded and saved as PNG", (1, 60, 1, 1),
+        lambda im, p: png(decoded_jpeg(im, 60), p))
+    add("jpeg-q60-shifted-to-png", "copy", "JPEG q60 4:2:0, 3 px cut from the left and top, saved as PNG",
+        (1, 60, 1, round((o.width - 3) * (o.height - 3) / (o.width * o.height), 4)),
+        lambda im, p: png(decoded_jpeg(im, 60).crop((3, 3, im.width, im.height)), p))
+    add("jpeg-q45-to-q95", "copy", "JPEG q45 4:2:0, re-saved as JPEG q95 4:4:4", (1, 45, 2, 1),
+        lambda im, p: save_jpeg(decoded_jpeg(im, 45), p + ".jpg", 95, 0))
+    add("jpeg-q85-to-webp-q80", "copy", "JPEG q85 4:2:0, re-saved as WebP q80", (1, 80, 2, 1),
+        lambda im, p: decoded_jpeg(im, 85).save(p + ".webp", "WEBP", quality=80, method=6))
+    add("webp-q50-to-png", "copy", "WebP q50, decoded and saved as PNG", (1, 50, 1, 1),
+        lambda im, p: png(decoded_webp(im, 50), p))
     # Crops: copy or version is the user's call.
     for c in (1, 2, 5, 10, 20):
         add(f"crop-{c}", "crop", f"{c} % cut from each side", (1, 100, 1, round((1 - c / 50) ** 2, 4)),

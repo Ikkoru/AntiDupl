@@ -114,9 +114,9 @@ def build_features(job):
             with open(pkl, "rb") as f:
                 cached = pickle.load(f)
             if cached["stamp"] == stamp and os.path.exists(w512) and os.path.exists(w1024):
-                if set(sm.HASHES) - set(cached["hashes"]):
-                    # Cached before a hash was added: only the hashes again.
-                    cached["hashes"] = sm.hashes(sm.longest(sm.open_image(path).convert("RGB"), 512))
+                if sm.needs_late(cached):
+                    # Cached before some features were added: only those.
+                    cached.update(sm.late_features(sm.longest(sm.open_image(path).convert("RGB"), 512)))
                     with open(pkl, "wb") as f:
                         pickle.dump(cached, f, protocol=5)
                 return pkl
@@ -197,7 +197,9 @@ def metric_names(slow):
     names += [f"colour-block-{s}" for s in (32, 64, 128)]
     names += ["wssim-gray-mean", "wssim-gray-worst", "wssim-colour-mean", "wssim-colour-worst", "ms-ssim", "gmsd",
               "haarpsi", "vifp", "ciede2000-mean", "ciede2000-p99", "psnr", "hist-intersection", "hist-bhattacharyya",
-              *sm.HASHES, "crop-resistant-hash", "sift-unmatched", "aligned-colour-block-64"]
+              *sm.HASHES, "crop-resistant-hash", "sift-unmatched", "aligned-colour-block-64",
+              *sm.CV_HASHES, "orb-unmatched", "orb-aligned-colour-block-64", "akaze-unmatched",
+              "akaze-aligned-colour-block-64"]
     if slow:
         names += ["butteraugli-512", "butteraugli-3norm-512", "butteraugli-1024", "butteraugli-3norm-1024",
                   "ssimulacra2-512", "ssimulacra2-1024"]
@@ -267,6 +269,25 @@ def compute_pairs(job):
         else:
             row["share-a"] = row["share-b"] = row["align-scale"] = row["align-rotation"] = ""
             row["aligned-colour-block-64"] = row["colour-block-64"]
+        for name in sm.CV_HASHES:
+            row[name] = "" if fa["cvhash"] is None or fb["cvhash"] is None else \
+                sm.cv_hash_distance(name, fa["cvhash"][name], fb["cvhash"][name])
+        for name in ("orb", "akaze"):
+            found = sm.cv_align(fa, fb, name)
+            if found is None:
+                for k in ("unmatched", "aligned-colour-block-64", "inliers", "share-a", "share-b"):
+                    row[f"{name}-{k}"] = ""
+                continue
+            inliers, matches, model = found
+            row[f"{name}-inliers"] = inliers
+            row[f"{name}-unmatched"] = 1 - inliers / max(1, min(len(fa[name][0]), len(fb[name][0])))
+            row[f"{name}-share-a"] = row[f"{name}-share-b"] = ""
+            row[f"{name}-aligned-colour-block-64"] = row["colour-block-64"]
+            if model is not None and inliers >= 15:
+                row[f"{name}-share-a"], row[f"{name}-share-b"] = sm.overlap_shares(fa, fb, model)
+                ab = aligned_block(fa, fb, model)
+                if ab is not None:
+                    row[f"{name}-aligned-colour-block-64"] = ab
         if slow:
             for side, wa, wb in ((512, wa512, wb512), (1024, wa1024, wb1024)):
                 size = Image.open(wa).size
@@ -421,34 +442,66 @@ def task_a(rows, names, images, lines):
         lines.append(f"| {n} | " + " | ".join(cells) + " |")
 
 
+def codec_of(img):
+    ext = img["file"].rsplit(".", 1)[1].lower()
+    return {"jpg": "jpeg", "jpeg": "jpeg", "webp": "webp", "avif": "avif", "jxl": "jxl"}.get(ext, "lossless")
+
+
 def loss(img):
     """(scale, quality, generations, kept, codec) of a clean or cropped
     image; the original is lossless at full size."""
     if img["kind"] == "original":
         return 1.0, 100.0, 0, 1.0, "lossless"
-    ext = img["file"].rsplit(".", 1)[1].lower()
-    codec = {"jpg": "jpeg", "jpeg": "jpeg", "webp": "webp", "avif": "avif", "jxl": "jxl"}.get(ext, "lossless")
+    codec = codec_of(img)
     q = img["quality"]
     quality = 100.0 if codec == "lossless" else float(q) if q.replace(".", "").isdigit() else None
     return float(img["scale"]), quality, int(img["generations"]), float(img["kept"]), codec
 
 
-def better_copy(i, j, images, quality):
+def effective_quality(img, q, history):
+    """The JPEG-equivalent quality of a file: the lower of its own JPEG
+    table's and, with `history`, the strongest JPEG trace in its pixels
+    (study_metrics.jpeg_history); 100 for a lossless file without such a
+    trace; None for other lossy files (WebP, AVIF, JPEG XL), whose quality
+    can't be read."""
+    found = [v for v in (q["jpeg_quality"], q.get("history_q") if history else None) if v is not None]
+    if found:
+        return min(found)
+    return 100.0 if codec_of(img) == "lossless" else None
+
+
+def better_copy(i, j, images, quality, history=True):
     """Of two images of the same picture, the one judged better: more
-    pixels; at the same pixel count lossless over lossy; both lossless,
-    clearly more detail (an upscaled copy has less); both JPEG, the higher
-    quality estimate; else the larger file."""
+    pixels (over 0.5 % apart); else the higher JPEG-equivalent quality
+    (over 2 apart); at the same quality, both lossless, clearly more detail
+    (an upscaled copy has less) and then the larger file; at the same lossy
+    quality the smaller file, the one converted fewer times; a lossless
+    file over one whose quality can't be read; else the larger file."""
     qi, qj = quality[i], quality[j]
     if abs(qi["pixels"] - qj["pixels"]) > 0.005 * max(qi["pixels"], qj["pixels"]):
         return i if qi["pixels"] > qj["pixels"] else j
-    ci, cj = loss(images[i])[4], loss(images[j])[4]
-    if (ci == "lossless") != (cj == "lossless"):
-        return i if ci == "lossless" else j
-    if ci == cj == "lossless" and max(qi["detail"], qj["detail"]) > 1.25 * min(qi["detail"], qj["detail"]):
-        return i if qi["detail"] > qj["detail"] else j
-    if ci == cj == "jpeg" and qi["jpeg_quality"] != qj["jpeg_quality"]:
-        return i if qi["jpeg_quality"] > qj["jpeg_quality"] else j
+    ei, ej = effective_quality(images[i], qi, history), effective_quality(images[j], qj, history)
+    if ei is not None and ej is not None:
+        if abs(ei - ej) > 2:
+            return i if ei > ej else j
+        if ei == ej == 100:
+            if max(qi["detail"], qj["detail"]) > 1.25 * min(qi["detail"], qj["detail"]):
+                return i if qi["detail"] > qj["detail"] else j
+            return i if qi["size"] > qj["size"] else j
+        return i if qi["size"] < qj["size"] else j
+    if 100 in (ei, ej):
+        return i if ei == 100 else j
     return i if qi["size"] > qj["size"] else j
+
+
+# Copies converted again after a lossy step (study_set.py), and which file
+# of a pair with one of them is better: (better stem, worse stem).
+HISTORY_PAIRS = [("original", "jpeg-q60-to-png"), ("jpeg-q90", "jpeg-q60-to-png"), ("jpeg-q75", "jpeg-q60-to-png"),
+                 ("original", "jpeg-q60-shifted-to-png"), ("jpeg-q75", "jpeg-q60-shifted-to-png"),
+                 ("jpeg-q90", "jpeg-q45-to-q95"), ("jpeg-q60", "jpeg-q45-to-q95"), ("jpeg-q45", "jpeg-q45-to-q95"),
+                 ("jpeg-q85", "jpeg-q85-to-webp-q80"), ("webp-q90", "jpeg-q85-to-webp-q80"),
+                 ("original", "webp-q50-to-png"), ("webp-q90", "webp-q50-to-png"), ("webp-q75", "webp-q50-to-png")]
+HISTORY_STEMS = {w for _, w in HISTORY_PAIRS}
 
 
 def task_b(images, quality, lines):
@@ -458,11 +511,19 @@ def task_b(images, quality, lines):
               "more re-encodings, or lossy against the original), **resolution** (lossless, one smaller), **crop** "
               "(lossless, full size, one shows less), **web copy** (the original against a copy that is smaller and "
               "compressed), **upscaled** (the original and the copies shrunk and blown back up to full size: the "
-              "same pixel count, less real detail). Per indicator: the share of pairs where it ranks the worse one "
-              "lower (ties count half); \"-\" where it has no value for those images.", ""]
-    groups = {"compression": [], "resolution": [], "crop": [], "web copy": [], "upscaled": []}
+              "same pixel count, less real detail), **lossy history** (copies converted again after a lossy step: "
+              "a JPEG saved as PNG, also shifted by 3 px; a q45 JPEG re-saved at q95; a JPEG re-saved as WebP; a "
+              "WebP saved as PNG; against files known to be better, `HISTORY_PAIRS`). Per indicator: the share of "
+              "pairs where it ranks the worse one lower (ties count half); \"-\" where it has no value for those "
+              "images.", ""]
+    groups = {"compression": [], "resolution": [], "crop": [], "web copy": [], "upscaled": [], "lossy history": []}
+    by_stem = {(img["case"], img["stem"]): i for i, img in enumerate(images)}
     for case in sorted({i["case"] for i in images}):
-        pool = [i for i, img in enumerate(images) if img["case"] == case and img["kind"] in ("original", "copy", "crop")]
+        for good, bad in HISTORY_PAIRS:
+            if (case, good) in by_stem and (case, bad) in by_stem:
+                groups["lossy history"].append((by_stem[(case, good)], by_stem[(case, bad)]))
+        pool = [i for i, img in enumerate(images) if img["case"] == case and img["kind"] in ("original", "copy", "crop")
+                and img["stem"] not in HISTORY_STEMS]
         for i, j in itertools.combinations(pool, 2):
             (sa, qa, ga, ka, ca), (sb, qb, gb, kb, cb) = loss(images[i]), loss(images[j])
             if None in (qa, qb):
@@ -488,8 +549,14 @@ def task_b(images, quality, lines):
                     better, kind = o, "web copy"
             if better is not None:
                 groups[kind].append((better, j if better == i else i))
+    for i, q in quality.items():
+        q["effective"] = effective_quality(images[i], q, True)
     indicators = [("pixels", lambda v: v["pixels"], 1), ("file size", lambda v: v["size"], 1),
-                  ("bytes per pixel", lambda v: v["bpp"], 1), ("JPEG quality estimate", lambda v: v["jpeg_quality"], 1),
+                  ("bytes per pixel", lambda v: v["bpp"], 1),
+                  ("JPEG quality of the file's table", lambda v: v["jpeg_quality"], 1),
+                  ("JPEG history: strongest JPEG trace in the pixels", lambda v: v.get("history_q"), 1),
+                  ("effective JPEG quality (the lower of both; 100 lossless without a trace)",
+                   lambda v: v["effective"], 1),
                   ("sharpness (Laplacian variance)", lambda v: v["sharpness"], 1),
                   ("detail (RMS lost when halved)", lambda v: v["detail"], 1),
                   ("AntiDupl blockiness", lambda v: v["blockiness"], -1), ("AntiDupl blurring", lambda v: v["blurring"], -1)]
@@ -507,12 +574,17 @@ def task_b(images, quality, lines):
                 score += 1.0 if sign * x > sign * y else 0.5 if x == y else 0.0
             cells.append(f"{100 * score / n:.0f} % ({n})" if n else "-")
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
-    cells = []
-    for k, pairs in groups.items():
-        right = sum(1 for good, bad in pairs if better_copy(good, bad, images, quality) == good)
-        cells.append(f"{100 * right / len(pairs):.0f} % ({right} of {len(pairs)})" if pairs else "-")
-    lines.append("| **rule** of `better_copy` (pixels, lossless, detail, JPEG quality, file size) | "
-                 + " | ".join(cells) + " |")
+    for history, label in ((False, "**rule** of `better_copy`, the file's format and JPEG table only"),
+                           (True, "**rule** of `better_copy` with the JPEG history")):
+        cells = []
+        for k, pairs in groups.items():
+            right = sum(1 for good, bad in pairs if better_copy(good, bad, images, quality, history) == good)
+            cells.append(f"{100 * right / len(pairs):.0f} % ({right} of {len(pairs)})" if pairs else "-")
+        lines.append(f"| {label} | " + " | ".join(cells) + " |")
+    wrong = [(images[g]["case"], images[g]["stem"], images[b]["stem"]) for k, pairs in groups.items()
+             for g, b in pairs if better_copy(g, b, images, quality, True) != g]
+    lines += ["", "Pairs the rule with the JPEG history gets wrong (case, better, worse): "
+              + ("; ".join(" ".join(w) for w in wrong) if wrong else "none") + "."]
 
 
 def task_c(rows, images, lines):
@@ -550,6 +622,24 @@ def task_c(rows, images, lines):
         aligned = sum(1 for r in g if r["sift-inliers"] >= 15)
         crops = sum(1 for r in g if crop_of(r))
         lines.append(f"| {key} | {len(g)} | {aligned} ({100 * aligned / len(g):.0f} %) | {crops} ({100 * crops / len(g):.0f} %) |")
+    # The same judgement with OpenCV's ORB and AKAZE keypoints.
+    def crop_by(r, method):
+        if method == "sift":
+            return crop_of(r)
+        a, b, n = r.get(f"{method}-share-a", ""), r.get(f"{method}-share-b", ""), r.get(f"{method}-inliers", "")
+        if "" in (a, b, n) or n < 15:
+            return False
+        return (b >= 0.95 and a < 0.97) or (a >= 0.95 and b < 0.97)
+    keys = ("original~crop", "copy pairs", "version pairs", "unrelated")
+    lines += ["", "Judged a crop, per keypoint method (ORB and AKAZE through OpenCV, same matching rules):", "",
+              "| Method | " + " | ".join(keys) + " |", "|---|" + "---|" * len(keys)]
+    for method in ("sift", "orb", "akaze"):
+        cells = []
+        for key in keys:
+            g = groups.get(key, [])
+            n = sum(1 for r in g if crop_by(r, method))
+            cells.append(f"{n} ({100 * n / len(g):.0f} %)" if g else "-")
+        lines.append(f"| {method.upper()} | " + " | ".join(cells) + " |")
     lines += ["", "| Crop | Kept (truth) | Kept (estimated, per case) | Rotation found |", "|---|---|---|---|"]
     for stem in ("crop-1", "crop-2", "crop-5", "crop-10", "crop-20", "crop-right-10", "crop-square", "crop-5-rescaled", "rotate-90", "mirror"):
         g = [r for r in rows if "original" in (images[r["a"]]["kind"], images[r["b"]]["kind"])
@@ -571,7 +661,8 @@ def task_c(rows, images, lines):
         lines.append(f"| {stem} | {truth} | {' '.join(est)} | {' '.join(rot) or '-'} |")
 
 
-EXTRA = ["sift-inliers", "sift-matches", "share-a", "share-b", "align-scale", "align-rotation"]
+EXTRA = ["sift-inliers", "sift-matches", "share-a", "share-b", "align-scale", "align-rotation",
+         "orb-inliers", "orb-share-a", "orb-share-b", "akaze-inliers", "akaze-share-a", "akaze-share-b"]
 
 
 def read_rows(out, images):
@@ -618,8 +709,9 @@ def read_quality(out, images):
         i = index.get((r["case"], r["file"]))
         if i is None:
             continue
-        quality[i] = {k: (None if r[k] in ("", "None") else float(r[k]))
-                      for k in ("pixels", "size", "bpp", "jpeg_quality", "sharpness", "detail", "blockiness", "blurring")}
+        quality[i] = {k: (None if r.get(k, "") in ("", "None") else float(r[k]))
+                      for k in ("pixels", "size", "bpp", "jpeg_quality", "sharpness", "detail", "history_q",
+                                "history_n", "blockiness", "blurring")}
     return quality
 
 
@@ -703,15 +795,16 @@ def compute(a, images):
     core = core_values(a.dll, a.set, sorted({img["case"] for img in images}), tmp) if a.dll else {}
     with ProcessPoolExecutor(a.workers) as pool:
         details = list(pool.map(sm.detail, [img["path"] for img in images], chunksize=1))
+        histories = list(pool.map(sm.jpeg_history, [img["path"] for img in images], chunksize=1))
     with open(os.path.join(a.out, "quality.csv"), "w", encoding="utf-8", newline="") as fq:
         w = csv.writer(fq)
         w.writerow(["case", "file", "kind", "pixels", "size", "bpp", "jpeg_quality", "sharpness", "detail",
-                    "blockiness", "blurring"])
+                    "history_q", "history_n", "blockiness", "blurring"])
         for i, img in enumerate(images):
             f = small[i]
             bl = core.get(os.path.normcase(os.path.abspath(img["path"])), (None, None))
             w.writerow([img["case"], img["file"], img["kind"], f["pixels"], os.path.getsize(img["path"]), f["bpp"],
-                        f["jpeg_quality"], f["sharpness"], details[i], bl[0], bl[1]])
+                        f["jpeg_quality"], f["sharpness"], details[i], *histories[i], bl[0], bl[1]])
 
     names = metric_names(not a.no_slow)
     fields = ["case_a", "a", "case_b", "b", "class", "changed"] + names + EXTRA

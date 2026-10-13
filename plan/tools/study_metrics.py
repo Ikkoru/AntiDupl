@@ -9,7 +9,9 @@ Image features (features(), cached by settings_study.py):
     hist        HSV histogram, 8 x 8 x 8, normalised
     hashes      aHash, dHash, pHash, wHash (64 bit), pHash and dHash with
                 256 bits, colorhash (from a 512 px copy), crop-resistant
-                hash
+                hash; with OpenCV (STUDY_PYLIB) also its block mean,
+                Marr-Hildreth, radial variance and colour moment hashes
+    orb, akaze  with OpenCV: ORB and AKAZE keypoints on the 512 px copy
     sift        SIFT keypoints (row, col) and descriptors on a 512 px grey
                 copy, for alignment
     quality     pixels, bytes per pixel, JPEG quality estimate (from the
@@ -19,6 +21,7 @@ written by settings_study.py.
 """
 import os
 import subprocess
+import sys
 
 import imagehash
 import numpy as np
@@ -31,6 +34,16 @@ from skimage import metrics as skmetrics
 from skimage import transform as sktransform
 
 import adsim
+
+# Extra package folders (pip --target), such as OpenCV's: STUDY_PYLIB, a
+# path list. Set in the environment so the worker processes get it too.
+for _p in reversed(os.environ.get("STUDY_PYLIB", "").split(os.pathsep)):
+    if _p and _p not in sys.path:
+        sys.path.insert(0, _p)
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 
 Image.MAX_IMAGE_PIXELS = None
 SIZES = [16, 32, 64, 128]
@@ -59,6 +72,66 @@ def jpeg_quality(im):
         if best_err is None or err < best_err:
             best, best_err = quality, err
     return best
+
+
+def ijg_quality_of_scale(scale):
+    """The IJG quality whose table scaling is `scale` per cent."""
+    return float(np.clip(5000 / scale if scale > 100 else (200 - scale) / 2, 1, 100))
+
+
+# Low-frequency AC positions (row, column) of the 8 x 8 DCT, in zigzag
+# order: the ones a JPEG quantises coarsely enough to leave a trace and
+# that still hold enough non-zero coefficients.
+HISTORY_POSITIONS = [(0, 1), (1, 0), (2, 0), (1, 1), (0, 2), (0, 3), (1, 2), (2, 1), (3, 0), (4, 0), (3, 1),
+                     (2, 2), (1, 3), (0, 4)]
+
+
+def jpeg_history(path, side=1536):
+    """The IJG quality of the strongest JPEG compression the pixels went
+    through, whatever the file's format is now; None when no JPEG trace
+    shows. Returns (quality, positions that showed a step).
+
+    A JPEG stores each 8 x 8 block's DCT coefficients rounded to multiples
+    of the quantisation table's steps; decoding and even re-saving at a
+    finer step keep them near those multiples (Fan and de Queiroz 2003).
+    On a central crop of the luma: the block grid is where the jumps
+    between neighbouring pixels peak every 8 pixels (a crop shifts it),
+    then per coefficient position the largest step q with cos(2 pi D / q)
+    averaging over 0.6 for the coefficients D away from zero, then the
+    IJG quality whose table scaling fits those steps (the median)."""
+    from scipy import fft
+    im = open_image(path).convert("RGB")
+    rgb = np.asarray(im, dtype=np.float64)
+    h, w = rgb.shape[:2]
+    y0, x0 = max(0, (h - side) // 2), max(0, (w - side) // 2)
+    rgb = rgb[y0:y0 + side, x0:x0 + side]
+    luma = rgb @ np.array([0.299, 0.587, 0.114])
+    # Grid: the column (row) where blocks start is the one with the largest
+    # average step from the pixel before it, counted every 8 pixels.
+    jx = np.abs(np.diff(luma, axis=1)).mean(axis=0)
+    jy = np.abs(np.diff(luma, axis=0)).mean(axis=1)
+    ox = int(np.argmax([jx[(np.arange(len(jx)) + 1) % 8 == c].mean() for c in range(8)]))
+    oy = int(np.argmax([jy[(np.arange(len(jy)) + 1) % 8 == c].mean() for c in range(8)]))
+    ny, nx = (luma.shape[0] - oy) // 8, (luma.shape[1] - ox) // 8
+    blocks = luma[oy:oy + 8 * ny, ox:ox + 8 * nx].reshape(ny, 8, nx, 8).transpose(0, 2, 1, 3)
+    # Clipped pixels (pure white or black) break the relation to the steps.
+    keep = (blocks.min(axis=(2, 3)) > 2) & (blocks.max(axis=(2, 3)) < 253)
+    coefs = fft.dctn(blocks[keep] - 128, axes=(1, 2), norm="ortho")
+    scales = []
+    for r, c in HISTORY_POSITIONS:
+        d = coefs[:, r, c]
+        best = None
+        for q in range(2, 121):
+            sel = d[np.abs(d) >= q / 2]
+            if len(sel) < 30:
+                break
+            if np.cos(2 * np.pi * sel / q).mean() >= 0.6:
+                best = q
+        if best is not None:
+            scales.append(100 * best / STD_LUMA[r * 8 + c])
+    if len(scales) < 3:
+        return None, len(scales)
+    return round(ijg_quality_of_scale(float(np.median(scales))), 1), len(scales)
 
 
 def open_image(path):
@@ -93,6 +166,48 @@ def hashes(small):
             "colorhash": imagehash.colorhash(small).hash.flatten(),
             "phash-256": imagehash.phash(small, hash_size=16).hash.flatten(),
             "dhash-256": imagehash.dhash(small, hash_size=16).hash.flatten()}
+
+
+CV_HASHES = ("cv-blockmean", "cv-marrhildreth", "cv-radialvariance", "cv-colormoment")
+_hashers = {}
+
+
+def cv_hasher(name):
+    if name not in _hashers:
+        h = cv2.img_hash
+        _hashers[name] = {"cv-blockmean": h.BlockMeanHash_create, "cv-marrhildreth": h.MarrHildrethHash_create,
+                          "cv-radialvariance": h.RadialVarianceHash_create,
+                          "cv-colormoment": h.ColorMomentHash_create}[name]()
+    return _hashers[name]
+
+
+# Features added after the first study; late_features() fills them into
+# caches made before.
+LATE_KEYS = ("hashes", "cvhash", "orb", "akaze")
+
+
+def late_features(small):
+    """The hashes, OpenCV's hashes, and ORB and AKAZE keypoints ((x, y)
+    and binary descriptors) of a 512 px copy; the OpenCV ones None
+    without OpenCV."""
+    out = {"hashes": hashes(small), "cvhash": None, "orb": None, "akaze": None}
+    if cv2 is None:
+        return out
+    bgr = np.ascontiguousarray(np.asarray(small.convert("RGB"))[..., ::-1])
+    out["cvhash"] = {name: cv_hasher(name).compute(bgr) for name in CV_HASHES}
+    grey = np.asarray(small.convert("L"))
+    # OpenCV 5 moved AKAZE to the contrib module xfeatures2d.
+    akaze = cv2.AKAZE_create() if hasattr(cv2, "AKAZE_create") else cv2.xfeatures2d.AKAZE_create()
+    for name, detector in (("orb", cv2.ORB_create(nfeatures=1000)), ("akaze", akaze)):
+        kp, desc = detector.detectAndCompute(grey, None)
+        out[name] = (np.array([k.pt for k in kp], dtype=np.float32).reshape(-1, 2), desc)
+    return out
+
+
+def needs_late(cached):
+    if any(k not in cached for k in LATE_KEYS) or set(HASHES) - set(cached["hashes"]):
+        return True
+    return cv2 is not None and cached["orb"] is None
 
 
 def features(path):
@@ -131,13 +246,15 @@ def features(path):
         keys, desc = np.zeros((0, 2), np.float32), np.zeros((0, 128), np.uint8)
     lap = gray.astype(np.float64)
     lap = lap[1:-1, 1:-1] * 4 - lap[:-2, 1:-1] - lap[2:, 1:-1] - lap[1:-1, :-2] - lap[1:-1, 2:]
-    return {
-        "planes": planes, "sq256": sq256, "hist": hist, "hashes": hashes(small), "crh": crh,
+    out = {
+        "planes": planes, "sq256": sq256, "hist": hist, "crh": crh,
         "sift_keys": keys, "sift_desc": desc, "sift_shape": g512.shape,
         "pixels": rgb.shape[0] * rgb.shape[1], "shape": rgb.shape[:2],
         "bpp": os.path.getsize(path) / (rgb.shape[0] * rgb.shape[1]),
         "jpeg_quality": quality, "sharpness": float(lap.var()),
     }
+    out.update(late_features(small))
+    return out
 
 
 # ---------------------------------------------------------------- metrics
@@ -349,6 +466,37 @@ def align(fa, fb):
     if model is None or inliers is None:
         return 0, len(m), None
     return int(inliers.sum()), len(m), model
+
+
+def cv_align(fa, fb, name):
+    """ORB or AKAZE matches (ratio test) and a RANSAC similarity transform
+    from b's 512 px copy to a's, like align(); None without OpenCV."""
+    if fa.get(name) is None or fb.get(name) is None:
+        return None
+    (pa, da), (pb, db) = fa[name], fb[name]
+    if da is None or db is None or len(pa) < 8 or len(pb) < 8:
+        return 0, 0, None
+    knn = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(db, da, k=2)
+    good = [m[0] for m in knn if len(m) == 2 and m[0].distance < 0.8 * m[1].distance]
+    if len(good) < 8:
+        return 0, len(good), None
+    src = pb[[m.queryIdx for m in good]]
+    dst = pa[[m.trainIdx for m in good]]
+    matrix, mask = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC, ransacReprojThreshold=2.0,
+                                               maxIters=2000, confidence=0.995)
+    # A fit on collapsed points can come back with scale 0, which has no
+    # inverse.
+    if matrix is None or not np.isfinite(matrix).all() or np.hypot(matrix[0, 0], matrix[1, 0]) < 1e-3:
+        return 0, len(good), None
+    return int(mask.sum()), len(good), sktransform.SimilarityTransform(matrix=np.vstack([matrix, [0, 0, 1]]))
+
+
+def cv_hash_distance(name, ha, hb):
+    """OpenCV's own comparison of two img_hash hashes as a difference:
+    Hamming distance (block mean, Marr-Hildreth), L2 (colour moments), and
+    1 - the peak cross-correlation (radial variance)."""
+    v = float(cv_hasher(name).compare(ha, hb))
+    return 1 - v if name == "cv-radialvariance" else v
 
 
 def clip_to_rect(poly, w, h):

@@ -8,7 +8,8 @@ Usage:
 
 DLL_DIR     folder holding AntiDupl.dll (e.g. bin\\Release of a build)
 USER_DIR    the engine's user folder (settings, image database); created if
-            missing. Never point it at the real %LOCALAPPDATA%\\AntiDupl.NET\\user.
+            missing. Refuses the real %LOCALAPPDATA%\\AntiDupl.NET and any
+            folder with an AntiDupl program next to it (an installed copy's).
 SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
             folder on.
 --size      reduced image size (AntiDupl's default 32; the user's 128)
@@ -117,6 +118,11 @@ def main():
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
     if os.path.normcase(os.path.abspath(a.user_dir)).startswith(real):
         sys.exit("refusing to use the real AntiDupl user folder")
+    # An installed AntiDupl's own settings: a folder with the program next to
+    # it (a portable install, such as the user's everyday personal build).
+    parent = os.path.dirname(os.path.abspath(a.user_dir).rstrip("\\/"))
+    if any(os.path.exists(os.path.join(parent, exe)) for exe in ("AntiDupl.NET.WinForms.exe", "AntiDupl.NET.exe")):
+        sys.exit("refusing to use the settings folder of an installed AntiDupl (the program sits next to it)")
     os.makedirs(a.user_dir, exist_ok=True)
 
     os.add_dll_directory(os.path.abspath(a.dll_dir))

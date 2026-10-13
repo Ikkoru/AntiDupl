@@ -66,6 +66,14 @@ static class Program
             Console.WriteLine("Refusing the real AntiDupl.NET user folder; give a scratch folder.");
             return 2;
         }
+        // An installed AntiDupl's own settings: a folder with the program next
+        // to it (a portable install, such as the user's everyday personal build).
+        string parent = Path.GetDirectoryName(Path.GetFullPath(args[1]).TrimEnd('\\', '/'));
+        if (File.Exists(Path.Combine(parent, "AntiDupl.NET.WinForms.exe")) || File.Exists(Path.Combine(parent, "AntiDupl.NET.exe")))
+        {
+            Console.WriteLine("Refusing the settings folder of an installed AntiDupl; give a scratch folder.");
+            return 2;
+        }
         Directory.CreateDirectory(args[1]);
         asm.GetType("AntiDupl.NET.WinForms.Resources", true).GetProperty("UserPath").SetValue(null, args[1]);
         asm.GetType("AntiDupl.NET.WinForms.Resources+Strings", true).GetMethod("Initialize").Invoke(null, null);
