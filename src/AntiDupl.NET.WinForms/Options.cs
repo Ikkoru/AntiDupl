@@ -71,6 +71,8 @@ namespace AntiDupl.NET.WinForms
         public string imageDiffExecutableArguments = "";
         /// <summary>Light (Classic), Dark or as Windows is set (System); applied at start-up.</summary>
         public SystemColorMode colorMode = SystemColorMode.Classic;
+        public string imageDiff2ExecutablePath = "";
+        public string imageDiff2ExecutableArguments = "";
 
         public MainFormOptions mainFormOptions = new MainFormOptions();
         public ResultsOptions resultsOptions = new ResultsOptions();
@@ -144,6 +146,8 @@ namespace AntiDupl.NET.WinForms
             imageDiffExecutablePath = options.imageDiffExecutablePath;
             imageDiffExecutableArguments = options.imageDiffExecutableArguments;
             colorMode = options.colorMode;
+            imageDiff2ExecutablePath = options.imageDiff2ExecutablePath;
+            imageDiff2ExecutableArguments = options.imageDiff2ExecutableArguments;
         }
 
         public void Save()
@@ -185,6 +189,8 @@ namespace AntiDupl.NET.WinForms
             options.imageDiffExecutablePath = imageDiffExecutablePath;
             options.imageDiffExecutableArguments = imageDiffExecutableArguments;
             options.colorMode = colorMode;
+            options.imageDiff2ExecutablePath = imageDiff2ExecutablePath;
+            options.imageDiff2ExecutableArguments = imageDiff2ExecutableArguments;
         }
 
         public static void PathCopy(string[] source, ref string[] destination)
@@ -251,6 +257,10 @@ namespace AntiDupl.NET.WinForms
             if (imageDiffExecutablePath != options.imageDiffExecutablePath)
                 return false;
             if (imageDiffExecutableArguments != options.imageDiffExecutableArguments)
+                return false;
+            if (imageDiff2ExecutablePath != options.imageDiff2ExecutablePath)
+                return false;
+            if (imageDiff2ExecutableArguments != options.imageDiff2ExecutableArguments)
                 return false;
             if (m_language != options.m_language)
                 return false;
