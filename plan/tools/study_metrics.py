@@ -48,6 +48,8 @@ except ImportError:
 Image.MAX_IMAGE_PIXELS = None
 SIZES = [16, 32, 64, 128]
 C1, C2 = (0.01 * 255) ** 2, (0.03 * 255) ** 2
+# libjxl's tools (djxl, butteraugli_main, ssimulacra2): this folder, or
+# PATH when the variable is unset.
 LIBJXL = os.environ.get("LIBJXL", "")
 
 # IJG standard luminance table (natural order) for the quality estimate.
