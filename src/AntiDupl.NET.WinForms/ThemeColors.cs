@@ -51,6 +51,14 @@ namespace AntiDupl.NET.WinForms
         static public Color Selection { get { return Dark ? Color.FromArgb(0x1E, 0x4C, 0x8A) : SystemColors.Highlight; } }
         static public Color SelectionText { get { return Dark ? Text : SystemColors.HighlightText; } }
 
+        /// <summary>
+        /// Selected rows of the results table, in both themes the dark
+        /// theme's highlight and text (user's choice), so coloured values
+        /// keep their dark-theme colours there (OnSelection).
+        /// </summary>
+        static public Color GridSelection { get { return Color.FromArgb(0x1E, 0x4C, 0x8A); } }
+        static public Color GridSelectionText { get { return Color.FromArgb(0xF8, 0xF8, 0xF8); } }
+
         /// <summary>The dotted outline of the current row: light mode only.</summary>
         static public bool CurrentRowOutline { get { return !Dark; } }
 
@@ -157,10 +165,11 @@ namespace AntiDupl.NET.WinForms
         static public Color Worse { get { return Dark ? Color.FromArgb(0xFF, 0x70, 0x70) : Color.Red; } }
 
         /// <summary>
-        /// A coloured text on a selected row: the same hue and saturation,
-        /// its lightness moved away from the selection colour (darker on the
-        /// light theme's mid blue, lighter on the dark theme's) only as far
-        /// as a contrast of SELECTION_CONTRAST needs. Color.Empty for a grey
+        /// A coloured text on a selected row of the results table
+        /// (GridSelection): the light theme's own colours become their dark
+        /// versions; any other keeps its hue and saturation, its lightness
+        /// moved away from the highlight only as far as a contrast of
+        /// SELECTION_CONTRAST needs. Color.Empty for a grey
         /// (white, black or between): it takes the selection's own text
         /// colour, as before.
         /// </summary>
@@ -168,7 +177,16 @@ namespace AntiDupl.NET.WinForms
         {
             if (color.IsEmpty || color.GetSaturation() < 0.25f || IsGreyish(color))
                 return Color.Empty;
-            Color back = Selection;
+            // The light theme's colours for worse values and identical
+            // pairs become their dark-theme versions on the shared highlight.
+            int argb = color.ToArgb();
+            if (argb == Color.Red.ToArgb())
+                return Color.FromArgb(0xFF, 0x70, 0x70);
+            if (argb == Color.Green.ToArgb())
+                return Color.LightGreen;
+            if (argb == Color.FromArgb(0xB3, 0x59, 0x00).ToArgb())
+                return Color.FromArgb(0xFF, 0xB3, 0x66);
+            Color back = GridSelection;
             if (Contrast(color, back) >= SELECTION_CONTRAST)
                 return color;
             bool darken = Contrast(Color.Black, back) >= Contrast(Color.White, back);
