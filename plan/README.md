@@ -37,26 +37,13 @@ Reproduction (any OS with Python): `tools/repro_difference.py` prints 0.217453 /
 1. **Identical-but-0.22:** Options → Advanced → untick *Use libjpeg-turbo* (every JPEG then goes through GDI+, no swap), close AntiDupl, delete `%LOCALAPPDATA%\AntiDupl.NET\user\images\128x128\` (stale cached planes; the "Delete irrelevant records" menu does not remove them), restart, search again. Expected: the example pairs show 0.00 — never green (green currently requires byte-identical files) and still occasionally missing at threshold 0 % (bug 2). Confirmed on the user's PC: all example pairs show 0.00.
 2. **View mode:** use **OK**, never Cancel/✕, in the Options dialog; after a Cancel re-select *View → Table of horizontal pairs*.
 
-## Order of work and upstream PRs
+## Upstream PRs
 
-Small, independent PRs against `ermig1979/AntiDupl:master` (active maintainer: Edi61; CI = GitHub Actions `windows-latest` MSBuild), then merge them all into the local-build branch:
-
-1. `fix(turbojpeg)`: `TJPF_BGRA` + FILE_VERSION bump/stale-pixel invalidation (#122, #236).
-2. `fix(jpeg)`: every JPEG through TurboJPEG when enabled, GDI+ fallback, EXIF still read.
-3. `fix(ssim)`: exact moments, double math, identical-plane shortcut, `/fp:precise` (#186).
-4. `fix(ui)`: Options Cancel no longer replaces `ResultsOptions`; full copy ctor.
-5. `fix(sort)`: no pair swapping for non-"sorted" types, total-order tie-breaks, natural order.
-6. `feat(ui)`: dark mode option (#115).
-7. `feat`: pixel identity + difference display rule.
-8. `feat`: Local colour / Butteraugli algorithms (open an issue first — bigger design change).
-9. Local-only unless upstream wants them: area resampling, metadata merge, QuantSmooth.
+Upstream's active maintainer is Edi61. Each PR's state is in [`../tasks.md`](../tasks.md), the rules for making one in [`../CLAUDE.md`](../CLAUDE.md), and what was posted in the workspace's `reference\github-drafts\README.md`.
 
 ## Build & verify
 
 Visual Studio or its Build Tools with the ".NET desktop" + "Desktop C++" workloads, the v143 toolset, .NET 10 SDK, vcpkg integrated (`vcpkg integrate install`); build `src/AntiDupl.sln` x64 Release. Build the vcpkg libraries with v143 as well: MSVC 14.51 (v145, Visual Studio 2026's default) miscompiles libde265 1.0.16 so that `AntiDupl.dll` fails to load ([06](06-stretch-and-ameliorations.md) A12). There are no automated tests in the repo: each document ends with a manual test list, and `tools/` re-computes the expected numbers.
-
-Two practical traps: v2.3.13's C# build events call `.cmd` scripts with unquoted paths, so it doesn't build from a folder with spaces or commas (task T0, fixed upstream by PR #244); and a build of upstream's code uses the same user-data folder as the installed release unless started with `-s <folder>` (the personal branch's build refuses to start without `-s` or a `user` folder next to it) — keep the user's real settings, image DB and mistakes list out of reach (the release can't read files written after a `FILE_VERSION` bump).
-
 ## Tools
 
 * `ssimulacra2.exe`, `butteraugli_main.exe` — libjxl reference builds, in `jxl-x64-windows-static.zip` (`bin\`) from the libjxl GitHub releases (v0.12.0 checked). They need not be on PATH: `tools/metric_experiment.py --tool-dir <folder>` (or `ANTIDUPL_TOOL_DIRS`) finds them.

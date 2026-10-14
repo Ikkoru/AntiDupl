@@ -18,7 +18,7 @@ Pointers for whoever picks this up (from reading the code, not researched furthe
 * Cache: the image DB stores reduced data per path+size+mtime; QS-derived data needs its own cache directory (e.g. `images\128x128_qs`) or a flag in the record, otherwise toggling QS mixes data.
 * Preview / Ctrl+D external diff: decide whether they show QS or original (user's current "QS Compare" script suggests QS for the diff tool).
 * Decision hooks: the action dispatch in `ResultsListView.MakeAction` / `ProgressForm` (delete, rename, mistake); age-based cleanup at start-up and after each search.
-* The user's existing tool: `…\hidpi-manga\tools\sendto\QS Compare (no menu).cmd`.
+* The user's existing tool: the QS Compare script (jpegQS on the JPEGs, then WinMerge on PNGs of both); where it is on the user's PC: the workspace's `Tools\README.txt`.
 
 ## S3 — Comparison-engine research *(done — see [02-comparison-modes.md](02-comparison-modes.md))*
 
