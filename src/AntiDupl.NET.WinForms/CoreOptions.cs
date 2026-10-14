@@ -46,9 +46,6 @@ namespace AntiDupl.NET.WinForms
         public CorePathWithSubFolder[] deletePath;
         public string ignoreFilenameFilter; // Regular expression pattern to filter files in ignore paths
 
-        /// <summary>Set when Load fell back to the defaults.</summary>
-        [XmlIgnore]
-        public UnreadableSettingsFile LoadProblem;
         /// <summary>
         /// While the command line's -search replaces the search folders for
         /// one run: the profile's own folders, which Save writes instead, so
@@ -73,6 +70,10 @@ namespace AntiDupl.NET.WinForms
             profileSearchPath = null;
             profileIgnorePath = null;
         }
+
+        /// <summary>Set when Load fell back to the defaults.</summary>
+        [XmlIgnore]
+        public UnreadableSettingsFile LoadProblem;
 
         public CoreOptions()
         {
