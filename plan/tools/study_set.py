@@ -222,6 +222,11 @@ def derived(original):
     # Web copies: smaller and compressed.
     add("scale-50-jpeg-q85", "copy", "50 % Lanczos, JPEG q85 4:2:0", (0.5, 85, 1, 1), lambda im, p: save_jpeg(resized(im, 0.5), p + ".jpg", 85))
     add("scale-25-jpeg-q75", "copy", "25 % Lanczos, JPEG q75 4:2:0", (0.25, 75, 1, 1), lambda im, p: save_jpeg(resized(im, 0.25), p + ".jpg", 75))
+    # Low-resolution JPEGs, where 8 x 8 blocks are a larger part of the
+    # picture (jpegQS, plan 07); the scale-NN PNGs are their references.
+    for s, q in ((50, 60), (25, 60), (25, 45), (12, 60)):
+        add(f"scale-{s}-jpeg-q{q}", "copy", f"{s} % Lanczos, JPEG q{q} 4:2:0", (s / 100, q, 1, 1),
+            lambda im, p, s=s, q=q: save_jpeg(resized(im, s / 100), p + ".jpg", q))
     add("upscale-50-x2", "copy", "50 % Lanczos, then back to full size", (0.5, 100, 1, 1),
         lambda im, p: png(resized(im, 0.5).resize(im.size, Image.LANCZOS), p))
     add("upscale-25-x4", "copy", "25 % Lanczos, then back to full size", (0.25, 100, 1, 1),
