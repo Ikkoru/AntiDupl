@@ -35,6 +35,8 @@ Also: [Options.cs:106-110](../src/AntiDupl.NET.WinForms/Options.cs#L106) returns
 * Defensive: `ResultRowSetter` should build rows for the grid's **actual** mode — expose `ResultsListView.CurrentViewMode` (`m_viewMode`) and use it at lines 243/395 (and in `ClipboardContentBuilder`), so a mismatch can never produce stacked cells again.
 * `Options.Load()`: on failure, copy the bad file to `options.xml.bad` and show one message instead of silently defaulting.
 
+**As implemented** (PR #249; the loaders in PR #251): the copy constructor and `CopyHighlightTo` as above, run from `FormClosing` for Cancel and ✕ alike; the defensive row-setter change was left out, since the object is never replaced (tasks.md T5).
+
 **Test:** horizontal mode → Options → change a highlight value → Cancel → rows still single-line; switch View modes → UI follows; restart → still horizontal; highlight value reverted. Repeat with ✕ instead of Cancel.
 
 **Workaround in the current release:** use **OK** (not Cancel/✕) in the Options dialog. After a Cancel, re-select *View → Table of horizontal pairs* before closing the app.
@@ -74,5 +76,7 @@ void TUndoRedoStage::Sort(TSortType sortType, bool increasing)
 
 * Rewrite `TResultPtrLesser` as a 3-way primary comparison; on ties fall back to a fixed chain that ignores the sort direction: `difference ↑ → first path ↑ → second path ↑ → id ↑`. This is a total order, so the result no longer depends on history (stable_sort is then just belt and braces).
 * Display sorts (name/directory/path) use natural order: `StrCmpLogicalW` (`shlwapi.lib`) on `TPath::Original()`. Keep `TPath::Compare` for the internal sorted containers (search-path lookup, image-DB index ranges) — their on-disk ordering assumptions must not change.
+
+**As implemented** (PR #250): the tie chain is first path, second path, difference, id; a sort by one image's property places each pair's image by the sort's direction; display sorts use an own `TPath::NaturalCompare` instead of `StrCmpLogicalW`. The rules are in tasks.md T6 and checked by `tools/sort_check.py`.
 
 **Test:** horizontal table: click *First directory* twice → the first column keeps the same files and only the order flips; click *Difference* → no pair changes sides; any sort applied twice from different starting orders gives identical row order; `x_p2` sorts before `x_p10`.

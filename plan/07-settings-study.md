@@ -15,6 +15,7 @@ Four digital illustrations by one artist (2470–4000 px wide, PNG), each with:
 | copy: lossy history | converted again after a lossy step: JPEG q60 saved as PNG; the same with 3 px cut from the left and top; JPEG q45 re-saved as JPEG q95; JPEG q85 re-saved as WebP q80; WebP q50 saved as PNG |
 | copy: resolution | 90, 75, 50, 33, 25 and 12 % (Lanczos, PNG); 50 % bilinear and nearest neighbour |
 | copy: web | 50 % as JPEG q85, 25 % as JPEG q75 |
+| copy: low-resolution JPEG | 50 % at q60, 25 % at q60 and q45, 12 % at q60: made for the jpegQS check below; in the set, but not yet in the tables and counts here |
 | copy: upscaled | shrunk to 50 % and 25 %, then blown back up to full size |
 | copy: processed | sharpened, blurred (1 px), brightness +5 %, saturation +15 % |
 | crop | 1, 2, 5, 10, 20 % cut from each side; 10 % from one side; the centre square; 5 % cut, then resized back to full size |

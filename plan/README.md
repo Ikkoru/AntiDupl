@@ -1,6 +1,6 @@
 # AntiDupl local build — research results and implementation plan
 
-Hand-off for a local Claude Code session (Windows 11, MSVC + vcpkg) working on the fork `Ikkoru/AntiDupl` (base: upstream `ermig1979/AntiDupl` `e06d082`, v2.3.13). The checklist is in [`../tasks.md`](../tasks.md); this folder holds the evidence and the designs.
+Research and designs for the fork `Ikkoru/AntiDupl` of `ermig1979/AntiDupl`, forked at `e06d082` (v2.3.13). The checklist is in [`../tasks.md`](../tasks.md); this folder holds the evidence and the designs. The bug analyses in 01 and 03 describe v2.3.13: their "today", "current" and line links are that version's, and upstream has merged most of the fixes since (status per task in tasks.md).
 
 ## The user's setup (from `options.xml` / `default.xml`)
 
@@ -20,13 +20,13 @@ Hand-off for a local Claude Code session (Windows 11, MSVC + vcpkg) working on t
 
 | # | User-visible problem | Root cause (proven) | Plan | Upstream |
 |---|---|---|---|---|
-| 1 | Pixel-identical pairs show 0.22 / 0.08 | TurboJPEG decodes R/B swapped (`TJPF_RGBA` into a `Bgra32` view) **and** only files starting `FF D8 FF E0` use TurboJPEG, the rest GDI+ → same pixels, different gray | [01 § A–C](01-difference-correctness.md) | fixes [#122](https://github.com/ermig1979/AntiDupl/issues/122), [#236](https://github.com/ermig1979/AntiDupl/issues/236) |
-| 2 | Identical images missing at threshold 0 %, not green | float32/`/fp:fast` SSIM gives 7.6e-6 for identical planes ~30 % of the time | [01 § D](01-difference-correctness.md) | fixes [#186](https://github.com/ermig1979/AntiDupl/issues/186) |
-| 3 | `0.00` shown for images that differ | 2-decimal rounding + tiny real differences; no pixel-identity concept | [01 § E–F](01-difference-correctness.md) | — |
+| 1 | Pixel-identical pairs show 0.22 / 0.08 | TurboJPEG decodes R/B swapped (`TJPF_RGBA` into a `Bgra32` view) **and** only files starting `FF D8 FF E0` use TurboJPEG, the rest GDI+ → same pixels, different gray | [01 § A–C](01-difference-correctness.md) | fixes [#122](https://github.com/ermig1979/AntiDupl/issues/122), [#236](https://github.com/ermig1979/AntiDupl/issues/236); merged: PRs #246, #247 |
+| 2 | Identical images missing at threshold 0 %, not green | float32/`/fp:fast` SSIM gives 7.6e-6 for identical planes ~30 % of the time | [01 § D](01-difference-correctness.md) | fixes [#186](https://github.com/ermig1979/AntiDupl/issues/186); merged: PR #248 |
+| 3 | `0.00` shown for images that differ | 2-decimal rounding + tiny real differences; no pixel-identity concept | [01 § E–F](01-difference-correctness.md) | PRs #256, #257 (open) |
 | 4 | Variants vs worse copies not separated | one global grayscale SSIM on 128 px; colour-blind, insensitive to local edits | [02](02-comparison-modes.md) | — |
-| 5 | Horizontal/vertical mode resets; stacked two-value cells | Options → **Cancel** replaces `resultsOptions` with a clone that lacks the view mode and all event subscribers | [03 § H](03-ui-bugs.md) | reported: [#242](https://github.com/ermig1979/AntiDupl/issues/242) |
-| 6 | Janky sorting, history-dependent | every pair left/right-swapped on most sorts; unstable `std::sort` without tie-breakers; no natural order | [03 § I](03-ui-bugs.md) | reported: [#241](https://github.com/ermig1979/AntiDupl/issues/241) |
-| 7 | No dark mode | — | [04](04-dark-mode.md) | [#115](https://github.com/ermig1979/AntiDupl/issues/115) |
+| 5 | Horizontal/vertical mode resets; stacked two-value cells | Options → **Cancel** replaces `resultsOptions` with a clone that lacks the view mode and all event subscribers | [03 § H](03-ui-bugs.md) | [#242](https://github.com/ermig1979/AntiDupl/issues/242); merged: PR #249 |
+| 6 | Janky sorting, history-dependent | every pair left/right-swapped on most sorts; unstable `std::sort` without tie-breakers; no natural order | [03 § I](03-ui-bugs.md) | [#241](https://github.com/ermig1979/AntiDupl/issues/241); merged: PR #250 |
+| 7 | No dark mode | — | [04](04-dark-mode.md) | [#115](https://github.com/ermig1979/AntiDupl/issues/115); PR #253 (open) |
 | 8 | (stretch) keep metadata of the deleted copy | — | [05](05-metadata-merge.md) | — |
 | 9 | (stretch) QuantSmooth pre-pass, other improvements | — | [06](06-stretch-and-ameliorations.md) | — |
 
@@ -55,7 +55,7 @@ Small, independent PRs against `ermig1979/AntiDupl:master` (active maintainer: E
 
 Visual Studio or its Build Tools with the ".NET desktop" + "Desktop C++" workloads, the v143 toolset, .NET 10 SDK, vcpkg integrated (`vcpkg integrate install`); build `src/AntiDupl.sln` x64 Release. Build the vcpkg libraries with v143 as well: MSVC 14.51 (v145, Visual Studio 2026's default) miscompiles libde265 1.0.16 so that `AntiDupl.dll` fails to load ([06](06-stretch-and-ameliorations.md) A12). There are no automated tests in the repo: each document ends with a manual test list, and `tools/` re-computes the expected numbers.
 
-Two practical traps: the C# build events call `.cmd` scripts with unquoted paths, so the solution doesn't build from a folder with spaces or commas (task T0); and a dev build uses the same user-data folder as the installed release unless started with `-s <folder>` — keep the user's real settings, image DB and mistakes list out of reach (FILE_VERSION 5 files can't be read by the release).
+Two practical traps: v2.3.13's C# build events call `.cmd` scripts with unquoted paths, so it doesn't build from a folder with spaces or commas (task T0, fixed upstream by PR #244); and a build of upstream's code uses the same user-data folder as the installed release unless started with `-s <folder>` (the personal branch's build refuses to start without `-s` or a `user` folder next to it) — keep the user's real settings, image DB and mistakes list out of reach (the release can't read files written after a `FILE_VERSION` bump).
 
 ## Tools
 

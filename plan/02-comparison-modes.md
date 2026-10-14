@@ -28,7 +28,7 @@ Sources downscaled to 1024 px first (faster run, same variants):
 
 Conclusions:
 
-* **Hashes / embeddings are the wrong tool here.** They are built to say "same picture" despite edits — great for finding candidates, useless for keeping variants. (Copy-detection embeddings such as SSCD/CLIP deliberately ignore edits; not pursued.)
+* **Hashes / embeddings are the wrong tool here.** They are built to say "same picture" despite edits — great for finding candidates, useless for keeping variants. (Copy-detection embeddings such as SSCD, and CLIP-like ones, deliberately ignore edits; [07](07-settings-study.md) measured SSCD, DINOv2 and SigLIP: no help in telling copies from versions, but candidate finders for crops.)
 * **Masking-aware perceptual metrics are the right tool.** Butteraugli's max-norm finds the single worst local difference *after* modelling how much compression noise texture hides — re-saves stay low, local edits (including mosaics) stand out. SSIMULACRA2 is designed to grade compression quality; it is weaker at "is this a different picture".
 * **A cheap colour block metric gets most of the way** for colour variants and local edits, at SSIM speed, but cannot see detail-only edits (fine mosaic censoring) and, like everything else, treats crops as edits.
 
@@ -56,7 +56,7 @@ Same experiment, varying the comparison size (gap = mildest variant ÷ worst dup
 
 ### Per-image data: compute once, cache, reuse for every mode
 
-Computed in `TDataCollector::FillPixelData` regardless of the selected algorithm and stored in the image DB (same FILE_VERSION 5 bump as [01](01-difference-correctness.md)):
+Computed in `TDataCollector::FillPixelData` regardless of the selected algorithm and stored in the image DB (one `FILE_VERSION` bump for all of it, T10; [01 § C](01-difference-correctness.md)):
 
 | Data | Size | Used by |
 |---|---|---|
@@ -92,10 +92,10 @@ Switching between Mean square / SSIM / Local colour therefore never decodes agai
 
 ## Calibrate on real data
 
-Synthetic edits are only a proxy. Before choosing defaults, run `tools/metric_experiment.py` on a handful of the user's real duplicate and variant sets (or add a "copy results with all metrics" clipboard action) and pick thresholds from those numbers.
+Synthetic edits are only a proxy. Before choosing defaults, run `tools/metric_experiment.py` on a handful of the user's real duplicate and variant sets (or add a "copy results with all metrics" clipboard action) and pick thresholds from those numbers. The settings study ([07](07-settings-study.md)) does this on a sample set from the user's archive.
 
 ## Known limitations / future work
 
-* Crops and borders: every metric tested scores a 1 % border crop as very different. Fix = align first (search scale/offset on thumbnails, then compare the overlap).
+* Crops and borders: every metric tested scores a 1 % border crop as very different. Fix = align first (search scale/offset on thumbnails, then compare the overlap); design in [07 § Crops](07-settings-study.md#crops) (T19).
 * Mirrored/rotated copies: existing *transformed image* option; pixel identity is reset for transforms.
 * Which copy is "worse": complementary — see JPEG-quality / bits-per-pixel columns in [06](06-stretch-and-ameliorations.md).

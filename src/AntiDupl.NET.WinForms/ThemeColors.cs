@@ -171,7 +171,7 @@ namespace AntiDupl.NET.WinForms
         /// moved away from the highlight only as far as a contrast of
         /// SELECTION_CONTRAST needs. Color.Empty for a grey
         /// (white, black or between): it takes the selection's own text
-        /// colour, as before.
+        /// colour.
         /// </summary>
         static public Color OnSelection(Color color)
         {
@@ -179,6 +179,9 @@ namespace AntiDupl.NET.WinForms
                 return Color.Empty;
             // The light theme's colours for worse values and identical
             // pairs become their dark-theme versions on the shared highlight.
+            // Both sides of each pair must match Worse and
+            // DifferenceFormat.GetColor, or the colour falls through to the
+            // contrast search below.
             int argb = color.ToArgb();
             if (argb == Color.Red.ToArgb())
                 return Color.FromArgb(0xFF, 0x70, 0x70);
@@ -202,8 +205,7 @@ namespace AntiDupl.NET.WinForms
             return candidate;
         }
 
-        // WCAG's minimum for large text and for graphics; the selection's
-        // own text has about 4.5 on the light theme's highlight.
+        // WCAG's minimum for large text and for graphics.
         const double SELECTION_CONTRAST = 3.0;
 
         static bool IsGreyish(Color c)
