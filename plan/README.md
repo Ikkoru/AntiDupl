@@ -26,7 +26,7 @@ Research and designs for the fork `Ikkoru/AntiDupl` of `ermig1979/AntiDupl`, for
 | 4 | Variants vs worse copies not separated | one global grayscale SSIM on 128 px; colour-blind, insensitive to local edits | [02](02-comparison-modes.md) | — |
 | 5 | Horizontal/vertical mode resets; stacked two-value cells | Options → **Cancel** replaces `resultsOptions` with a clone that lacks the view mode and all event subscribers | [03 § H](03-ui-bugs.md) | [#242](https://github.com/ermig1979/AntiDupl/issues/242); merged: PR #249 |
 | 6 | Janky sorting, history-dependent | every pair left/right-swapped on most sorts; unstable `std::sort` without tie-breakers; no natural order | [03 § I](03-ui-bugs.md) | [#241](https://github.com/ermig1979/AntiDupl/issues/241); merged: PR #250 |
-| 7 | No dark mode | — | [04](04-dark-mode.md) | [#115](https://github.com/ermig1979/AntiDupl/issues/115); PR #253 (open) |
+| 7 | No dark mode | — | [04](04-dark-mode.md) | [#115](https://github.com/ermig1979/AntiDupl/issues/115); merged: PR #253 |
 | 8 | (stretch) keep metadata of the deleted copy | — | [05](05-metadata-merge.md) | — |
 | 9 | (stretch) QuantSmooth pre-pass, other improvements | — | [06](06-stretch-and-ameliorations.md) | — |
 
