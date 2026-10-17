@@ -148,6 +148,27 @@ namespace ad
 		double C2;
     };
     //-------------------------------------------------------------------------
+    // Local colour difference: the colour thumbnails split into
+    // COLOR_BLOCK_SIZE square blocks, each block's RMS difference over its
+    // pixels and B, G, R, and the worst block as the difference, in percent
+    // of 255. A change confined to a small area counts in full, and so does
+    // a change of colour that keeps the brightness.
+    class TImageComparer_LocalColor : public TImageComparer
+    {
+    public:
+        TImageComparer_LocalColor(TEngine *pEngine);
+
+    protected:
+        virtual void Add(TImageDataPtr pImageData);
+        virtual void Compare(TImageDataPtr pOriginal, TImageDataPtr pTransformed, adTransformType transform);
+        virtual bool IsDuplPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference);
+
+    private:
+        size_t m_frameBlocks; // blocks left out along each edge (Ignore frame width)
+        uint64_t m_blockThreshold; // a block's squared-difference sum above this fails the pair
+        int m_fastCellThreshold; // so does a fast-data cell difference above this
+    };
+    //-------------------------------------------------------------------------
     TImageComparer* CreateImageComparer(TEngine *pEngine);
     //-------------------------------------------------------------------------
 }
