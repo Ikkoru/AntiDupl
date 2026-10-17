@@ -834,8 +834,24 @@ def compute(a, images):
         r["class"], changed = classes[(r["a"], r["b"])]
         r["changed"] = "" if changed is None else round(changed, 4)
 
+    # The pairs are hours of work: on disk before the per-image steps, so a
+    # failure there loses only those.
+    names = metric_names(not a.no_slow)
+    fields = ["case_a", "a", "case_b", "b", "class", "changed"] + names + EXTRA
+    with open(os.path.join(a.out, "pairs.csv"), "w", encoding="utf-8", newline="") as fp:
+        w = csv.DictWriter(fp, fields, extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            out = dict(r)
+            out["case_a"], out["case_b"] = images[r["a"]]["case"], images[r["b"]]["case"]
+            out["a"], out["b"] = images[r["a"]]["file"], images[r["b"]]["file"]
+            w.writerow(out)
+    print("pairs.csv written", flush=True)
+
     core = core_values(a.dll, a.set, sorted({img["case"] for img in images}), tmp) if a.dll else {}
-    with ProcessPoolExecutor(a.workers) as pool:
+    # detail and jpeg_history hold full-size float copies of an image (over
+    # 0.5 GB for a 24 MP one) and more while they work: fewer at a time.
+    with ProcessPoolExecutor(min(a.workers, 4)) as pool:
         details = list(pool.map(sm.detail, [img["path"] for img in images], chunksize=1))
         histories = list(pool.map(sm.jpeg_history, [img["path"] for img in images], chunksize=1))
     with open(os.path.join(a.out, "quality.csv"), "w", encoding="utf-8", newline="") as fq:
@@ -847,17 +863,6 @@ def compute(a, images):
             bl = core.get(os.path.normcase(os.path.abspath(img["path"])), (None, None))
             w.writerow([img["case"], img["file"], img["kind"], f["pixels"], os.path.getsize(img["path"]), f["bpp"],
                         f["jpeg_quality"], f["sharpness"], details[i], *histories[i], bl[0], bl[1]])
-
-    names = metric_names(not a.no_slow)
-    fields = ["case_a", "a", "case_b", "b", "class", "changed"] + names + EXTRA
-    with open(os.path.join(a.out, "pairs.csv"), "w", encoding="utf-8", newline="") as fp:
-        w = csv.DictWriter(fp, fields, extrasaction="ignore")
-        w.writeheader()
-        for r in rows:
-            out = dict(r)
-            out["case_a"], out["case_b"] = images[r["a"]]["case"], images[r["b"]]["case"]
-            out["a"], out["b"] = images[r["a"]]["file"], images[r["b"]]["file"]
-            w.writerow(out)
     shutil.rmtree(tmp, ignore_errors=True)
 
 
