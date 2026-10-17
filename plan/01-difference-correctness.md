@@ -5,7 +5,7 @@ Covers the user's issues 2–4 ("Difference makes mistakes", "pixel-identical pa
 ## How AntiDupl computes `Difference` today (SSIM mode)
 
 1. **Decode.** [`TImage::Load`](../src/AntiDupl/adImage.cpp) picks the decoder by sniffing bytes: `TTurboJpeg::Supported()` only returns true when the file starts with `FF D8 FF E0` ([adTurboJpeg.cpp:101](../src/AntiDupl/adTurboJpeg.cpp#L101)), i.e. a JFIF APP0 segment. Every other JPEG (EXIF-first `FFE1`, Photoshop `FFED`, ICC `FFE2`, bare `FFDB`, …) goes to GDI+.
-2. **Gray + reduce.** [`TDataCollector::FillPixelData`](../src/AntiDupl/adDataCollector.cpp#L70) converts the view to gray (`BgraToGray` for anything labelled `Bgra32`), bilinear-resizes it to 256×256 (`Simd::Resize` default = bilinear, line 101), then `ReduceGray2x2` to 128×128. The 128×128 plane (+ float `average`/`varianceSquare`) is cached in the image database (`…\user\images\128x128\*.adi`).
+2. **Gray + reduce.** [`TDataCollector::FillPixelData`](../src/AntiDupl/adDataCollector.cpp#L70) converts the view to gray (`BgraToGray` for anything labelled `Bgra32`), bilinear-resizes it to 256×256 (`Simd::Resize` default = bilinear; the personal branch area-averages, § G), then `ReduceGray2x2` to 128×128. The 128×128 plane (+ float `average`/`varianceSquare`) is cached in the image database (`…\user\images\128x128\*.adi`).
 3. **Compare.** [`TImageComparer_SSIM::IsDuplPair`](../src/AntiDupl/adImageComparer.cpp#L332) computes a single-window (global) SSIM of the two 128×128 planes in `float`, `difference = 100·(1 − SSIM)`, rejects the pair if `difference > thresholdDifference` (integer %), and finally adds `ADDITIONAL_DIFFERENCE_FOR_DIFFERENT_CRC32 = 1e-6` when the files' CRC32C differ (line 416).
 4. **Display.** [ResultRowSetter.cs:325-329](../src/AntiDupl.NET.WinForms/ResultRowSetter.cs#L325): `ToString("F2")`; bold + `LightGreen` only when `difference == 0` exactly.
 
@@ -163,7 +163,9 @@ Styling: `d == 0` → bold + "identical" colour; `0 < d < 1e-5` → regular + sa
 | colour variant, same luma | 0.0058 | 0.0056 |
 | local recolour 5 % | 0.0362 | 0.0378 |
 
-Area resampling makes re-saves/resizes 3–50× "closer" without hiding edits (it does not fix the colour-blindness — see [02](02-comparison-modes.md)). One-line change at [adDataCollector.cpp:101](../src/AntiDupl/adDataCollector.cpp#L101) (`Simd::Resize(gray, *m_pGrayBuffers.front(), SimdResizeMethodArea)`, or resize straight to `reducedImageSize`). It shifts every SSIM value, so upstream it should be an option; in the personal build it goes into T10's `FILE_VERSION` bump.
+Area resampling makes re-saves/resizes 3–50× "closer" without hiding edits (it does not fix the colour-blindness — see [02](02-comparison-modes.md)). It shifts every SSIM value, so upstream it should be an option.
+
+**As implemented** (T10, `feat/local-colour`): `AreaResize` in `adDataCollector.cpp`, an own box filter, reduces the grey image to 256×256 and the 2×2 reductions halve that to the reduced size, so the plane is the area average of the full image; an image under 256 px in either direction is resized bilinearly. The colour thumbnail of [02](02-comparison-modes.md) mode 3 comes from the same filter. Not `SimdResizeMethodArea`: against PIL's box filter it comes out darker the more it shrinks (−1.9 levels at 1/16, −3.2 at 1/31, −9.8 at 1/62, about 0 at 1/7.5: the mean level difference at 64 px, on study images of several sizes, through a scratch harness linking vcpkg's Simd), which gives copies of one picture at different sizes a difference. `FILE_VERSION` 7: older records are decoded again once.
 
 ## Test plan
 

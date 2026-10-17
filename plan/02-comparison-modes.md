@@ -56,23 +56,24 @@ Same experiment, varying the comparison size (gap = mildest variant ÷ worst dup
 
 ### Per-image data: compute once, cache, reuse for every mode
 
-Computed in `TDataCollector::FillPixelData` regardless of the selected algorithm and stored in the image DB (one `FILE_VERSION` bump for all of it, T10; [01 § C](01-difference-correctness.md)):
+Computed in `TDataCollector::FillPixelData` regardless of the selected algorithm and stored in the image DB (`FILE_VERSION` 6 holds the hash, 7 the colour thumbnail and the area-averaged plane; [01 § C](01-difference-correctness.md)):
 
 | Data | Size | Used by |
 |---|---|---|
-| 128×128 gray plane + `sum`/`sumSquare` (exact) | 16 KB | Mean square, SSIM |
+| 128×128 gray plane, **area**-resampled from the full image (T10), + `sum`/`sumSquare` (exact) | 16 KB | Mean square, SSIM |
 | 4×4 "fast" data (existing) | 16 B | prefilters |
 | 64×64 BGR colour thumbnail, **area**-resampled from the full image | 12 KB | Local colour |
 | full-resolution pixel hash (XXH3-64) | 8 B | identity, all modes |
 
 Switching between Mean square / SSIM / Local colour therefore never decodes again — only the comparison loop re-runs. Butteraugli needs bigger images (below) and gets its own caches.
 
-### Mode 3 — "Local colour difference" (fast)
+### Mode 3 — "Local colour difference" (fast; T11, on the personal branch)
 
-* Metric: split both 64×64 thumbnails into a 16×16 grid of 4×4-pixel blocks; per block `rms = sqrt(mean over pixels and B,G,R of (a−b)²)`; result `= 100 · max(rms) / 255` (%).
-* Threshold: integer % like today; on the test set duplicates ≤ 2.3, edits ≥ 6.6 → default **4**.
-* Cost ≈ SSIM (12 KB per pair). All-pairs like `TImageComparer_SSIM`, or prune with the existing 4×4 fast data: worst-block colour RMS ≥ |mean luma difference| / 1.16 for any region, so a fast-data luma difference above `1.16 · threshold · 2.55` (plus a safety margin for the different resampling) can be skipped safely.
-* Respect *Ignore frame width* by masking border blocks.
+* Metric: split both 64×64 thumbnails into a 16×16 grid of 4×4-pixel blocks; per block `rms = sqrt(mean over pixels and B,G,R of (a−b)²)`; result `= 100 · max(rms) / 255` (%). `TImageComparer_LocalColor` in `adImageComparer.cpp`.
+* Core value `AD_COMPARING_LOCAL_COLOR = 3`: 2 is the .NET side's `AlgorithmComparing.Dinov2`, a search the .NET code runs itself, and the core compares a 2 as SSIM.
+* Threshold: whole percent 0–50, default **4** (`THRESHOLD_DIFFERENCE_DEFAULT_LOCAL_COLOR`). On the first test set duplicates ≤ 2.3, edits ≥ 6.6; in the settings study every plain copy is at most 4.1 %, 1.5 % without the 12–25 % copies ([07](07-settings-study.md#antidupls-own-algorithms-size-grey-or-colour-resampling)).
+* Cost ≈ SSIM (12 KB per pair), all pairs like `TImageComparer_SSIM`, with an early exit once a block passes the threshold. Prefilter on the existing 4×4 fast data: a cell's grey difference is at most 1.158 times the RMS colour difference of its worst block, so a pair with cells further apart than `ceil(1.158 · threshold) + 3` levels is skipped (3 levels for the rounding in both thumbnails).
+* *Ignore frame width* leaves out the border blocks it touches, and turns the prefilter off (the frame's edge need not fall on a block edge).
 
 ### Mode 4 — "Perceptual (Butteraugli)" (slow, most accurate)
 
@@ -85,9 +86,9 @@ Switching between Mean square / SSIM / Local colour therefore never decodes agai
 
 ### Plumbing
 
-* `enum adAlgorithmComparing` ([AntiDupl.h:385](../src/AntiDupl/AntiDupl.h#L385)): add `AD_COMPARING_LOCAL_COLOR = 2`, `AD_COMPARING_BUTTERAUGLI = 3` before `AD_COMPARING_SIZE` — no struct layout change; range check in [adOptions.cpp:109](../src/AntiDupl/adOptions.cpp#L109) follows automatically.
-* `CreateImageComparer` ([adImageComparer.cpp:421](../src/AntiDupl/adImageComparer.cpp#L421)) returns the new comparers; all of them use the identity rule of [01 § E](01-difference-correctness.md).
-* C#: [AlgorithmComparing.cs](../src/AntiDupl.NET.Core/Enums/AlgorithmComparing.cs), the combo boxes in [CoreOptionsForm.cs:234-246](../src/AntiDupl.NET.WinForms/Form/CoreOptionsForm.cs#L234) and `MainToolStrip`, per-mode threshold ranges/defaults (`THRESHOLD_DIFFERENCE_*`), strings (English/Russian).
+* `enum adAlgorithmComparing` ([AntiDupl.h:385](../src/AntiDupl/AntiDupl.h#L385)): `AD_COMPARING_LOCAL_COLOR = 3`, and `AD_COMPARING_BUTTERAUGLI = 4` to come, before `AD_COMPARING_SIZE` — no struct layout change; range check in [adOptions.cpp:109](../src/AntiDupl/adOptions.cpp#L109) follows automatically.
+* `CreateImageComparer` ([adImageComparer.cpp:495](../src/AntiDupl/adImageComparer.cpp#L495)) returns the new comparers; all of them use the identity rule of [01 § E](01-difference-correctness.md).
+* C#: [AlgorithmComparing.cs](../src/AntiDupl.NET.Core/Enums/AlgorithmComparing.cs), the combo boxes in [CoreOptionsForm.cs:263-266](../src/AntiDupl.NET.WinForms/Form/CoreOptionsForm.cs#L263) and `MainToolStrip` (`ALGORITHMS`), per-mode threshold ranges/defaults (`THRESHOLD_DIFFERENCE_*`, `CoreOptionsForm.ThresholdMax`/`ThresholdDefault`), strings (English/Russian). The WPF front end lists only mean square and SSIM.
 * Optional (makes switching instant without re-searching): store every cheap metric per result (`double ssim, colour, butteraugli`) and show them as extra sortable columns — needs an `adResult` ABI/`.adr` format change.
 
 ## Calibrate on real data

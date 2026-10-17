@@ -9,7 +9,8 @@ Usage: <python with torch, torchvision, timm and transformers>
 
 Reads the pairs from <out>/pairs.csv and the 512 px working copies from
 <cache> (both written by settings_study.py), and writes
-<out>/pairs-embed.csv with a column per pair metric asked for, and with
+<out>/pairs-embed.csv with a column per pair metric asked for (and the
+columns of the file it replaces that the run doesn't compute), and with
 --nr <out>/quality-nr.csv with no-reference quality per image; both are
 joined by settings_study.py. Nothing is fetched from the network: every
 model comes from a file named here.
@@ -241,7 +242,22 @@ def main():
             columns[name] = values
             print(f"{name}: {len(values)} pairs on {device}", flush=True)
     if columns:
-        with open(os.path.join(a.out, "pairs-embed.csv"), "w", encoding="utf-8", newline="") as f:
+        path = os.path.join(a.out, "pairs-embed.csv")
+        # The columns of the file this one replaces that this run doesn't
+        # compute are kept, for the pairs they have: a model file can be
+        # gone by the next run (SigLIP's is), and its values with it.
+        kept = {}
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                old = [n for n in (reader.fieldnames or [])[4:] if n not in columns]
+                rows = {(r["case_a"], r["a"], r["case_b"], r["b"]): r for r in reader} if old else {}
+            for n in old:
+                kept[n] = [rows[p][n] if p in rows else "" for p in pairs]
+            if kept:
+                print(f"kept from the earlier {path}: {', '.join(kept)}", flush=True)
+        columns = {**kept, **columns}
+        with open(path, "w", encoding="utf-8", newline="") as f:
             w = csv.writer(f)
             w.writerow(["case_a", "a", "case_b", "b", *columns])
             for k, (ca, fa, cb, fb) in enumerate(pairs):

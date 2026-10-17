@@ -14,8 +14,7 @@ Four digital illustrations by one artist (2470–4000 px wide, PNG), each with:
 | copy: compression | JPEG q100 and q95 (4:4:4), q90 down to q30 (4:2:0), q85 re-encoded three times; WebP q90/75/50; AVIF q60; JPEG XL distance 1 and 4 |
 | copy: lossy history | converted again after a lossy step: JPEG q60 saved as PNG; the same with 3 px cut from the left and top; JPEG q45 re-saved as JPEG q95; JPEG q85 re-saved as WebP q80; WebP q50 saved as PNG |
 | copy: resolution | 90, 75, 50, 33, 25 and 12 % (Lanczos, PNG); 50 % bilinear and nearest neighbour |
-| copy: web | 50 % as JPEG q85, 25 % as JPEG q75 |
-| copy: low-resolution JPEG | 50 % at q60, 25 % at q60 and q45, 12 % at q60: made for the jpegQS check below; in the set, but not yet in the tables and counts here |
+| copy: web | 50 % as JPEG q85 and q60; 25 % as JPEG q75, q60 and q45; 12 % as JPEG q60 (the q60 and q45 ones also serve the jpegQS check below) |
 | copy: upscaled | shrunk to 50 % and 25 %, then blown back up to full size |
 | copy: processed | sharpened, blurred (1 px), brightness +5 %, saturation +15 % |
 | crop | 1, 2, 5, 10, 20 % cut from each side; 10 % from one side; the centre square; 5 % cut, then resized back to full size |
@@ -23,19 +22,19 @@ Four digital illustrations by one artist (2470–4000 px wide, PNG), each with:
 | greyscale, transform | greyscale; mirrored; rotated 90° |
 | edit | small text; a black bar; mosaic; a smudged region; a cloned patch; a local recolour (all on the most detailed regions); a global recolour |
 
-Every pair within an illustration is compared, and each final image against every image of the other three: 290 images, 11,280 pairs.
+Every pair within an illustration is compared, and each final image against every image of the other three: 306 images, 12,512 pairs.
 
 | Class | Pairs |
 |---|---|
-| copy: the original and its copies, any two | 2,664, of which 1,984 **plain** (no processed copy and not the 3 px cut one in the pair) |
-| variant-minor, -medium, -major: the original or a copy against a variant, or two variants; under 1 %, 1–5 %, 5 % or more of the picture changed | 256, 214, 533 |
-| sketch, wip-far, wip-close: the original or a copy against a step in the first quarter, middle, last quarter of the steps | 296, 629, 333 |
-| edit-minor (text, bar), edit-medium (mosaic, smudge, clone, local recolour), edit-major (global recolour) | 296, 592, 148 |
-| crop, overlay, greyscale, transform: the user's call whether these are copies | 1,184, 444, 148, 296 |
-| unrelated: a final against another illustration's image | 864 |
+| copy: the original and its copies, any two | 3,280, of which 2,520 **plain** (no processed copy and not the 3 px cut one in the pair) |
+| variant-minor, -medium, -major: the original or a copy against a variant, or two variants; under 1 %, 1–5 %, 5 % or more of the picture changed | 280, 230, 589 |
+| sketch, wip-far, wip-close: the original or a copy against a step in the first quarter, middle, last quarter of the steps | 328, 697, 369 |
+| edit-minor (text, bar), edit-medium (mosaic, smudge, clone, local recolour), edit-major (global recolour) | 328, 656, 164 |
+| crop, overlay, greyscale, transform: the user's call whether these are copies | 1,312, 492, 164, 328 |
+| unrelated: a final against another illustration's image | 912 |
 | other (step~step, variant~edit, …): not judged | 2,383 |
 
-The versions (variant, step and edit classes) add up to 3,297 pairs.
+The versions (variant, step and edit classes) add up to 3,641 pairs.
 
 ## Method
 
@@ -44,7 +43,7 @@ Every algorithm gives each pair a value; sorted by it, smallest first, the resul
 Algorithms, all as a difference (0 = identical):
 
 * AntiDupl's SSIM and mean square difference at every setting: size 16–128; grey (AntiDupl's plane) or colour (the same per B, G, R plane); *bilinear* (AntiDupl's resampling: bilinear to 256, then 2×2 reductions) or *area* (box filter straight to the size, [01 § G](01-difference-correctness.md)). The Python pipeline (`tools/adsim.py`) reproduces the core: SSIM at sizes 128 and 32 on 256 pairs each, largest deviation 5e-7.
-* The planned **local colour difference** ([02](02-comparison-modes.md), mode 3, T11): worst 4×4-block colour RMS of area-resampled thumbnails, 32–128 px; and **aligned local colour**: the same at 64 px after aligning the two images with keypoints (SIFT; ORB and AKAZE through OpenCV), over the part both show.
+* The **local colour difference** ([02](02-comparison-modes.md), mode 3, T11): worst 4×4-block colour RMS of area-resampled thumbnails, 32–128 px; and **aligned local colour**: the same at 64 px after aligning the two images with keypoints (SIFT; ORB and AKAZE through OpenCV), over the part both show. The core's own (the personal branch, 64 px) agrees with the study's on every pair within an illustration that it reports under 50 % (`core_search.py`; Spearman 0.98, median difference 0.03 points) and pairs up the same versions before the last plain copy.
 * Full-reference metrics on 256 × 256 copies: windowed SSIM (mean, and the worst 32-px tile), MS-SSIM, GMSD, HaarPSI, VIF, CIEDE2000, PSNR, and the learned LPIPS (AlexNet) and DISTS. Butteraugli and SSIMULACRA2 (libjxl's tools) at 512 and 1024 px.
 * Colour histograms; perceptual hashes (aHash, dHash, pHash, wHash with 64 bits, pHash and dHash with 256 bits, colorhash, the crop-resistant hash, OpenCV's block mean, Marr–Hildreth, radial variance and colour moment hashes); the share of keypoints left unmatched.
 * Neural image embeddings, 1 − cosine similarity: SigLIP (a CLIP-like model), DINOv2 ViT-S/14, and SSCD (Meta's model trained for copy detection).
@@ -52,43 +51,45 @@ Algorithms, all as a difference (0 = identical):
 
 ## Which algorithm finds which kind of copy
 
-Versions before the worst pair of the original against one kind of copy (of 3,297 version pairs; "–" = 2,000 or more, nearly every version first; the best value of each column in bold; *shifted* is the JPEG q60 saved as PNG with 3 px cut from two sides):
+Versions before the worst pair of the original against one kind of copy (of 3,641 version pairs; "–" = 2,000 or more, nearly every version first; the best value of each column in bold; *shifted* is the JPEG q60 saved as PNG with 3 px cut from two sides):
 
 | Algorithm | compression | resolution | web copy | upscaled | processed | shifted | crop | overlay | greyscale | transform |
 |---|---|---|---|---|---|---|---|---|---|---|
-| SSIM, grey, bilinear, 128 (the user's setting) | 53 | 981 | 758 | 499 | 442 | 1,257 | – | – | **0** | – |
-| SSIM, grey, area, 128 | 63 | 433 | 200 | 4 | 560 | 419 | – | – | **0** | – |
-| SSIM, grey, area, 64 | 86 | 325 | 146 | 1 | 829 | 322 | – | – | **0** | – |
-| mean square, grey, area, 64 | 67 | 332 | 115 | 1 | 1,326 | 353 | – | – | **0** | – |
-| local colour, 64 | 1 | 110 | **1** | **0** | 156 | **111** | – | – | 1,393 | – |
-| local colour, 128 | **0** | 187 | 39 | **0** | **36** | 191 | – | – | 954 | – |
-| windowed SSIM, worst tile | 32 | 148 | 67 | **0** | 71 | 328 | – | – | 70 | – |
-| GMSD | 1 | 628 | 241 | 4 | 54 | 880 | – | – | 1 | – |
-| HaarPSI | 130 | 644 | 275 | 1 | 340 | 647 | – | – | – | – |
-| Butteraugli, 512 | **0** | 68 | **1** | **0** | 110 | 122 | – | – | 1,859 | – |
-| Butteraugli, 1024 | **0** | **6** | 6 | **0** | **36** | 303 | – | – | 1,684 | – |
-| SSIMULACRA2, 512 | 33 | 77 | 38 | **0** | 75 | 213 | – | – | 722 | – |
-| LPIPS (AlexNet) | 118 | 645 | 168 | 16 | 149 | 471 | – | – | – | – |
-| DISTS | 624 | 628 | 469 | 10 | 672 | 592 | – | – | – | – |
-| aligned local colour, 64 (SIFT) | 1 | 20 | **1** | **0** | 154 | 273 | **11** | **883** | 1,393 | – |
-| aligned local colour, 64 (ORB) | 1 | 182 | **1** | **0** | 153 | 114 | 73 | **883** | 1,393 | – |
-| aligned local colour, 64 (AKAZE) | 1 | 73 | **1** | **0** | 153 | 120 | 116 | **883** | 1,393 | – |
-| pHash, 256 bits | 468 | 468 | 468 | 468 | 982 | 741 | – | – | 468 | – |
-| radial variance hash (OpenCV) | 544 | 655 | 571 | 236 | 1,104 | 674 | – | – | 81 | – |
-| colour histogram | 1,907 | 437 | 1,009 | 39 | 1,865 | 1,081 | 1,964 | 1,883 | – | **9** |
-| SSCD embedding | 901 | 460 | 1,506 | 8 | 215 | 1,218 | – | – | 1,961 | – |
-| DINOv2 embedding | 743 | 319 | 1,547 | 11 | 113 | 421 | – | – | 1,899 | – |
+| SSIM, grey, bilinear, 128 (the user's setting) | 53 | 1,069 | 1,156 | 528 | 465 | 1,373 | – | – | **0** | – |
+| SSIM, grey, area, 128 | 63 | 470 | 545 | 4 | 614 | 455 | – | – | **0** | – |
+| SSIM, grey, area, 64 | 88 | 353 | 359 | 1 | 913 | 350 | – | – | **0** | – |
+| mean square, grey, area, 64 | 68 | 362 | 383 | 1 | 1,462 | 384 | – | – | **0** | – |
+| local colour, 64 | 1 | 120 | 166 | **0** | 172 | **121** | – | – | 1,537 | – |
+| local colour, 128 | **0** | 206 | 209 | **0** | **39** | 211 | – | – | 1,054 | – |
+| windowed SSIM, worst tile | 33 | 161 | 275 | **0** | 75 | 356 | – | – | 74 | – |
+| GMSD | 1 | 682 | 1,340 | 4 | 54 | 951 | – | – | 1 | – |
+| HaarPSI | 132 | 685 | 934 | 1 | 354 | 690 | – | – | – | – |
+| Butteraugli, 512 | **0** | 76 | 82 | **0** | 122 | 137 | – | – | – | – |
+| Butteraugli, 1024 | **0** | **9** | **40** | **0** | 40 | 342 | – | – | 1,865 | – |
+| SSIMULACRA2, 512 | 34 | 84 | 209 | **0** | 80 | 228 | – | – | 796 | – |
+| LPIPS (AlexNet) | 122 | 678 | 1,145 | 16 | 154 | 498 | – | – | – | – |
+| DISTS | 637 | 642 | – | 10 | 686 | 605 | – | – | – | – |
+| aligned local colour, 64 (SIFT) | 1 | 20 | **40** | **0** | 169 | 301 | **11** | **975** | 1,537 | – |
+| aligned local colour, 64 (ORB) | 1 | 199 | 172 | **0** | 168 | 125 | 81 | **975** | 1,537 | – |
+| aligned local colour, 64 (AKAZE) | 1 | 80 | 80 | **0** | 168 | 133 | 128 | **975** | 1,537 | – |
+| pHash, 256 bits | 516 | 516 | 516 | 516 | 1,082 | 819 | – | – | 516 | – |
+| radial variance hash (OpenCV) | 583 | 720 | 748 | 236 | 1,214 | 739 | – | – | 81 | – |
+| colour histogram | – | 437 | 1,853 | 39 | – | 1,125 | – | – | – | **9** |
+| SSCD embedding | 918 | 463 | – | 8 | 216 | 1,252 | – | – | – | – |
+| DINOv2 embedding | 752 | 321 | – | 11 | 113 | 423 | – | – | – | – |
 | SigLIP embedding | 620 | 1,060 | 1,059 | 366 | 89 | 255 | – | – | – | – |
 
-* **Compression and upscaling are easy** for most metrics that compare the pictures; AntiDupl's bilinear pipeline is the exception for upscaled copies (499 versions first at the user's setting). The copies converted after a lossy step count as compression here.
-* The cheap metrics differ in **resolution**: the 12 % copies (300–480 px wide) are the farthest from the original; Butteraugli at 1024 px puts 6 versions before them, aligned local colour (SIFT) 20, every other metric 68 or more.
-* **Local colour at 64 px** is the best of the cheap algorithms: with the threshold at the last plain copy except the 12 and 25 % ones, it pairs up **1** version (two of the artist's variants whose difference doesn't show at 512 px), against 97 for the best SSIM setting and 522 at the user's setting (next section). Butteraugli at 512 px pairs up none.
-* **Processed copies** are a colour change for the colour metrics: a brightness +5 % copy puts 156 versions before it with local colour at 64 px. Grey SSIM hardly sees saturation (1–50 versions before it) but sees brightness (442–829). Whether such a copy is one to delete is the user's call; a copy that lost its colour profile looks like this.
+SigLIP has no values for the 50 % q60, 25 % q60 and q45, and 12 % q60 JPEGs (its model file is missing from the PC), so its web copy column covers only the 50 % q85 and 25 % q75 copies.
+
+* **Compression and upscaling are easy** for most metrics that compare the pictures; AntiDupl's bilinear pipeline is the exception for upscaled copies (528 versions first at the user's setting). The copies converted after a lossy step count as compression here.
+* The cheap metrics differ in **resolution**: the 12 % copies (300–480 px wide) are the farthest from the original, and a JPEG of them farther still. Butteraugli at 1024 px (either norm) puts 9 versions before the resized copies and 35–40 before the web copies, aligned local colour (SIFT) 20 and 40, every other metric 76 or more.
+* **Local colour at 64 px** is the best of the cheap algorithms: with the threshold at the last plain copy except the 12 and 25 % ones, it pairs up **1** version (two of the artist's variants whose difference doesn't show at 512 px), against 101 for the best SSIM setting and 552 at the user's setting (next section). Butteraugli at 512 px pairs up none.
+* **Processed copies** are a colour change for the colour metrics: a brightness +5 % copy puts 172 versions before it with local colour at 64 px. Grey SSIM hardly sees saturation (1–50 versions before it) but sees brightness (465–913). Whether such a copy is one to delete is the user's call; a copy that lost its colour profile looks like this.
 * **A 3 px cut** (the *shifted* copy) puts over 100 versions first even for the best metrics, the aligned ones included.
-* **Crops are found only after alignment.** The metrics that compare the pictures point by point sort crops among the versions: the median 1 % crop after 28–91 % of them, the median 5 % crop after 64–100 %. Colour histograms and the embeddings tolerate crops but can't tell versions from copies. Aligned local colour with SIFT puts every crop up to 20 % per side before all but 11 versions (ORB 73, AKAZE 116). Overlays: the border and the corner watermark align and sort among the copies; the large centre text sorts among the versions for every metric.
-* **Greyscale** sorts among the copies for grey AntiDupl settings and GMSD, and after hundreds of versions for colour metrics: the plane setting decides this user's call.
+* **Crops are found only after alignment.** The metrics that compare the pictures point by point sort crops among the versions: the median 1 % crop after 27–91 % of them, the median 5 % crop after 64–100 %. Colour histograms and the embeddings tolerate crops but can't tell versions from copies. Aligned local colour with SIFT puts every crop up to 20 % per side before all but 11 versions (ORB 81, AKAZE 128). Overlays: the border and the corner watermark align and sort among the copies; the large centre text sorts among the versions for every metric.
+* **Greyscale** sorts among the copies for grey AntiDupl settings and GMSD, and after 1,000 or more versions for the colour metrics: the plane setting decides this user's call.
 * **Mirrors and rotations** are found by AntiDupl's search for turned and mirrored copies, not by the metrics; only colour histograms and OpenCV's colour moment hash ignore them.
-* **Hashes and embeddings can't tell a copy from a version.** The perceptual hashes (imagehash's and OpenCV's) give most minor variants and edits a distance as small as the copies' (pHash-256: 468 versions within the distance of the farthest compressed copy). The embeddings see the same artwork, not the same picture: steps and edits score as close as copies, SSCD's too, since it was trained to ignore edits. The learned full-reference metrics put 118 (LPIPS, compression) to 645 versions (LPIPS, resolution) before the farthest compressed or resized copy. VIF ranks resized copies after most versions (2,096 before the 12 % copies).
+* **Hashes and embeddings can't tell a copy from a version.** The perceptual hashes (imagehash's and OpenCV's) give most minor variants and edits a distance as small as the copies' (pHash-256: 516 versions within the distance of the farthest compressed copy). The embeddings see the same artwork, not the same picture: steps and edits score as close as copies, SSCD's too, since it was trained to ignore edits. The learned full-reference metrics put 122 (LPIPS, compression) to 678 versions (LPIPS, resolution) before the farthest compressed or resized copy. VIF ranks resized copies after most versions (2,258 before the 12 % copies).
 
 ## AntiDupl's own algorithms: size, grey or colour, resampling
 
@@ -96,27 +97,27 @@ Versions before the last plain copy, with / without the 12–25 % copies:
 
 | Algorithm | Plane | Resampling | 16 | 32 | 64 | 128 |
 |---|---|---|---|---|---|---|
-| SSIM | grey | bilinear | 506 / 396 | 438 / 298 | 544 / 343 | 988 / 522 |
-| SSIM | grey | area | 475 / 393 | 401 / 260 | 384 / 137 | 515 / 97 |
-| SSIM | colour | bilinear | 489 / 424 | 394 / 312 | 487 / 282 | 867 / 486 |
-| SSIM | colour | area | 480 / 423 | 359 / 281 | 322 / 218 | 471 / 149 |
-| mean square | grey | bilinear | 395 / 324 | 360 / 264 | 459 / 268 | 860 / 398 |
-| mean square | grey | area | 420 / 351 | 420 / 206 | 400 / 104 | 513 / 155 |
-| mean square | colour | bilinear | 429 / 429 | 323 / 275 | 396 / 263 | 795 / 346 |
-| mean square | colour | area | 510 / 510 | 390 / 314 | 337 / 249 | 498 / 143 |
-| local colour | colour | area | – | 303 / 85 | **146 / 1** | 195 / 1 |
+| SSIM | grey | bilinear | 564 / 431 | 526 / 322 | 632 / 364 | 1,157 / 552 |
+| SSIM | grey | area | 526 / 427 | 445 / 278 | 432 / 144 | 573 / 101 |
+| SSIM | colour | bilinear | 540 / 465 | 446 / 337 | 684 / 301 | 994 / 510 |
+| SSIM | colour | area | 578 / 462 | 452 / 306 | 480 / 228 | 731 / 154 |
+| mean square | grey | bilinear | 440 / 352 | 398 / 278 | 527 / 278 | 947 / 417 |
+| mean square | grey | area | 464 / 379 | 478 / 219 | 441 / 108 | 630 / 160 |
+| mean square | colour | bilinear | 471 / 471 | 404 / 294 | 530 / 273 | 916 / 359 |
+| mean square | colour | area | 557 / 557 | 514 / 340 | 541 / 260 | 851 / 147 |
+| local colour | colour | area | – | 372 / 92 | **169 / 1** | 251 / 1 |
 
-* **Area resampling beats AntiDupl's bilinear pipeline at 64 and 128 px** for both algorithms (T10); at 32 px it is mixed. The bilinear pipeline is worst at 128, the user's size: at 128 px area pairs up 97 versions where bilinear pairs up 522. Bilinear-then-halving keeps aliasing that area averaging removes; it also makes a blurred copy look far (216 versions before it at the user's setting, 1 with area) and an upscaled one (499 against 4).
-* **Size 64 or 128, not 16.** With area resampling, 64 px is best when the 12–25 % copies count. Without them, SSIM gains at 128 px (97 against 137), mean square doesn't (155 against 104), and local colour is the same.
-* **Grey or colour** decides the greyscale version (above). Otherwise neither wins: colour is mostly better when the 12–25 % copies count, grey when they don't.
-* **Thresholds:** every SSIM setting from 32 px up finds every plain copy below 0.62 % (below 0.28 % without the 12–25 % copies), but AntiDupl's smallest threshold above 0 is 1 %, which at the user's setting pairs up 1,266 of the 3,297 versions (T16). Mean square needs 0.68–2.55 % (0.33–1.72 % without them). Local colour at 64 px needs 3.7 % (1.5 % without them), and 1 % misses nearly a quarter of the plain copies.
-* What the user's setting pairs up besides copies (without the 12–25 % copies): 190 of the 256 minor variants, 3 medium ones, 71 minor and 227 medium edits, 31 near-final steps. SSIM with area at 128 px: 39 minor variants and 58 minor edits. Local colour at 64 px: 1 minor variant.
+* **Area resampling beats AntiDupl's bilinear pipeline at 128 px** for both algorithms (T10), and at 64 px but for mean square in colour with the 12–25 % copies (541 against 530); at 32 px it is mixed. The bilinear pipeline is worst at 128, the user's size: at 128 px area pairs up 101 versions where bilinear pairs up 552. Bilinear-then-halving keeps aliasing that area averaging removes; it also makes a blurred copy look far (221 versions before it at the user's setting, 1 with area) and an upscaled one (528 against 4).
+* **Size 64 or 128, not 16.** With area resampling and the 12–25 % copies counted, 64 px is best in grey and for local colour; in colour, 32 px is better by under 30 versions. Without them, SSIM gains at 128 px (101 against 144), mean square doesn't (160 against 108), and local colour is the same.
+* **Grey or colour** decides the greyscale version (above). Otherwise grey is mostly better: with area resampling at every size, with or without the 12–25 % copies (but for mean square at 128 px without them, 160 against 147); with bilinear resampling it depends on the size.
+* **Thresholds:** every SSIM setting from 32 px up finds every plain copy below 0.75 % (below 0.28 % without the 12–25 % copies), but AntiDupl's smallest threshold above 0 is 1 %, which at the user's setting pairs up 1,386 of the 3,641 versions (T16). Mean square needs 0.69–2.80 % (0.33–1.72 % without them). Local colour at 64 px needs 4.1 % (1.5 % without them), and 1 % misses nearly a third of the plain copies. At 4 %, the core's default, the study's values pair up 169 versions and miss 3 of the 2,520 plain copy pairs, each the 12 % q60 JPEG against a 25 % copy of one illustration, both of which pair up with the original; the original against its brightness +5 % copy comes at 3.9–4.4 %, around it (5 %: no plain copy missed, 220 versions).
+* What the user's setting pairs up besides copies (without the 12–25 % copies): 202 of the 280 minor variants, 3 medium ones, 77 minor and 238 medium edits, 32 near-final steps. SSIM with area at 128 px: 42 minor variants and 59 minor edits. Local colour at 64 px: 1 minor variant.
 
 ## Which copy is worse
 
 Pairs of the same picture that differ in one way, so one is known to be worse: **compression** (same size, one more lossy: a lower quality of the same codec, more re-encodings, or lossy against the original), **resolution** (lossless, one smaller), **crop** (lossless, full size, one shows less), **web copy** (the original against a smaller compressed copy), **upscaled** (the original and its shrunk-and-blown-up copies: the same pixel count, less real detail), **lossy history** (each copy converted again after a lossy step against files known to be better: the original, the JPEG or WebP it came from, a JPEG of a higher quality; `HISTORY_PAIRS` in `tools/settings_study.py`). The share of pairs where each property ranks the worse one lower (pairs where it has a value):
 
-| Property | compression (192) | resolution (180) | crop (224) | web copy (8) | upscaled (12) | lossy history (52) |
+| Property | compression (192) | resolution (180) | crop (224) | web copy (24) | upscaled (12) | lossy history (52) |
 |---|---|---|---|---|---|---|
 | pixels | 50 % (all equal) | 100 % | 100 % | 100 % | 50 % (all equal) | 58 % |
 | file size | 98 % | 99 % | 96 % | 100 % | 83 % | 35 % |
@@ -126,11 +127,11 @@ Pairs of the same picture that differ in one way, so one is known to be worse: *
 | effective JPEG quality (the lower of both; 100 for lossless without a trace) | 97 % | 50 % | 50 % | 100 % | 50 % | 86 % (36) |
 | sharpness (Laplacian variance) | 60 % | 8 % | 31 % | 0 % | 100 % | 92 % |
 | detail lost when halved | 62 % | 7 % | 29 % | 0 % | 100 % | 81 % |
-| AntiDupl blockiness | 95 % | 56 % | 45 % | 88 % | 33 % | 85 % |
+| AntiDupl blockiness | 95 % | 56 % | 45 % | 96 % | 33 % | 85 % |
 | AntiDupl blurring | 38 % | 34 % | 66 % | 0 % | 100 % | 63 % |
-| TOPIQ-NR (learned, no-reference) | 96 % | 5 % | 47 % | 25 % | 100 % | 94 % |
-| MUSIQ (learned, no-reference) | 92 % | 15 % | 33 % | 38 % | 100 % | 98 % |
-| NIQE (no-reference) | 65 % | 26 % | 33 % | 12 % | 67 % | 71 % |
+| TOPIQ-NR (learned, no-reference) | 96 % | 5 % | 47 % | 33 % | 100 % | 94 % |
+| MUSIQ (learned, no-reference) | 92 % | 15 % | 33 % | 42 % | 100 % | 98 % |
+| NIQE (no-reference) | 65 % | 26 % | 33 % | 8 % | 67 % | 71 % |
 | BRISQUE (no-reference) | 45 % | 6 % | 48 % | 0 % | 42 % | 31 % |
 | **the rule**, the file's format and JPEG table only | 100 % | 100 % | 100 % | 100 % | 100 % | 33 % |
 | **the rule** with the JPEG trace | 100 % | 100 % | 100 % | 100 % | 100 % | 83 % |
@@ -166,21 +167,21 @@ Keypoints on 512 px copies (SIFT with scikit-image; ORB and AKAZE with OpenCV), 
 
 | Keypoints | original~crop judged a crop | copy pairs | version pairs | unrelated | extract (per image) | stored (per image) | match and fit (per pair) |
 |---|---|---|---|---|---|---|---|
-| SIFT (scikit-image) | 32 of 32 | 0 | 148 (4 %) | 0 | 310 ms | 82 kB | 21 ms |
-| ORB (OpenCV, up to 1000) | 32 of 32 | 0 | 144 (4 %) | 0 | 3 ms | 38 kB | 1.4 ms |
-| AKAZE (OpenCV) | 32 of 32 | 0 | 111 (3 %) | 0 | 12 ms | 33 kB | 0.7 ms |
+| SIFT (scikit-image) | 32 of 32 | 0 | 164 (5 %) | 0 | 310 ms | 82 kB | 21 ms |
+| ORB (OpenCV, up to 1000) | 32 of 32 | 0 | 159 (4 %) | 0 | 3 ms | 38 kB | 1.4 ms |
+| AKAZE (OpenCV) | 32 of 32 | 0 | 123 (3 %) | 0 | 12 ms | 33 kB | 0.7 ms |
 
 * Every crop is found, with the share of the original it keeps estimated to two decimals of the truth (centre square, 1–20 % per side, one side, rescaled). The 90° rotation aligns too, with the angle found. Mirrored copies don't align (keypoints aren't mirror-symmetric); AntiDupl's mirrored search covers them.
 * The version pairs judged crops are one illustration's middle steps against its final and copies: those steps are on a canvas 3 % taller and 1 % wider than the final's, and the final shows 96 % of it. The geometry is right.
-* ORB and AKAZE judge crops as well as SIFT and are 25–100 times faster to extract here (scikit-image's SIFT is slow; OpenCV's would be closer). As the aligned comparison, SIFT keeps more crops ahead of the versions (11 versions first, ORB 73, AKAZE 116).
+* ORB and AKAZE judge crops as well as SIFT and are 25–100 times faster to extract here (scikit-image's SIFT is slow; OpenCV's would be closer). As the aligned comparison, SIFT keeps more crops ahead of the versions (11 versions first, ORB 81, AKAZE 128).
 
-Matching every pair of a large collection is too slow even at 1 ms, so a crop search needs candidates first, and the global metrics can't give them (they rank crops among the versions). What only has to separate crops from **unrelated** pictures does: SSCD, SigLIP and colour histograms put every crop ahead of every unrelated pair, DINOv2 all but 3 of 864 (crops and versions alike pass, and the aligned comparison then tells them apart). The unrelated pairs here are only 864, between four illustrations by one artist; a real collection holds far more, which histograms with their 512 numbers per image will mistake more often than an embedding trained for copies. [06 § S4](06-stretch-and-ameliorations.md) A5 has the idea; this is its design: an SSCD-like embedding or histogram per image to pick candidates, ORB keypoints per image to align them, local colour on the overlap to judge.
+Matching every pair of a large collection is too slow even at 1 ms, so a crop search needs candidates first, and the global metrics can't give them (they rank crops among the versions). What only has to separate crops from **unrelated** pictures does: SSCD, SigLIP and colour histograms put every crop ahead of every unrelated pair, DINOv2 all but 3 of 912 (crops and versions alike pass, and the aligned comparison then tells them apart). The unrelated pairs here are only 912, between four illustrations by one artist; a real collection holds far more, which histograms with their 512 numbers per image will mistake more often than an embedding trained for copies. [06 § S4](06-stretch-and-ameliorations.md) A5 has the idea; this is its design: an SSCD-like embedding or histogram per image to pick candidates, ORB keypoints per image to align them, local colour on the overlap to judge.
 
 ## Conclusions
 
-* **With today's build** (grey, bilinear; SSIM or mean square; whole-percent thresholds): SSIM at 32 px sorts copies before versions best (AUC 0.959, against 0.938 at 128 px) and at 1 % returns every copy; mean square returns fewer versions at 1–2 % but misses processed copies.
-* **T10:** area resampling for every algorithm's reduced images.
-* **T11:** local colour difference at 64 px as the default: the best cheap algorithm for every plain copy, compression and upscaling included.
+* **With upstream's build** (grey, bilinear; SSIM or mean square; whole-percent thresholds): SSIM at 32 px sorts copies before versions best (AUC 0.956, against 0.930 at 128 px) and at 1 % returns every copy; mean square returns fewer versions at 1–2 % but misses processed copies.
+* **T10** (done on the personal branch): area resampling for every algorithm's reduced images.
+* **T11** (done on the personal branch, threshold default 4 %): local colour difference at 64 px: the best cheap algorithm for every plain copy, compression and upscaling included.
 * **T12:** Butteraugli as a slow second look at the candidates, at 512 px (1024 px for copies under a quarter of the size).
 * **Crops** (T19): a new kind of search in two stages (above).
 * **The worse copy:** the rule above with the JPEG trace, when hints are reworked ([06 § S4](06-stretch-and-ameliorations.md) A3); the JPEG quality, its trace and bytes per pixel as columns (A2) would show the user the same evidence. For lossy steps that aren't JPEG: the WebP trace once calibrated, or a learned score such as TOPIQ-NR as the tie-breaker.
