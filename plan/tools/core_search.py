@@ -2,7 +2,7 @@
 
 Usage:
     python core_search.py DLL_DIR USER_DIR SEARCH_DIR [--size N] [--threshold N]
-                          [--turbo 0|1] [--algorithm 0|1] [--runs N] [--use-db]
+                          [--turbo 0|1] [--algorithm 0|1|3] [--runs N] [--use-db]
                           [--details] [--collect-threads N] [--transformed]
                           [--images FILE]
 
@@ -15,7 +15,8 @@ SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
 --size      reduced image size (AntiDupl's default 32; the user's 128)
 --threshold threshold difference in % (default 1)
 --turbo     use libjpeg-turbo (default 1)
---algorithm 0 = mean square, 1 = SSIM (default 1)
+--algorithm 0 = mean square, 1 = SSIM (default 1), 3 = local colour (T11;
+            builds with it only)
 --runs      repeat the search N times in one engine (float-noise checks)
 --use-db    like the GUI's "use database of image": load the image database
             from USER_DIR\\images\\<size>x<size> before each search and save it
