@@ -13,7 +13,8 @@ USER_DIR    the engine's user folder (settings, image database); created if
 SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
             folder on.
 --size      reduced image size (AntiDupl's default 32; the user's 128)
---threshold threshold difference in % (default 1)
+--threshold threshold difference in % (default 1); fractions only with builds
+            that take them (a double in the compare options)
 --turbo     use libjpeg-turbo (default 1)
 --algorithm 0 = mean square, 1 = SSIM (default 1), 3 = local colour (T11;
             builds with it only)
@@ -52,13 +53,34 @@ IMAGE_TYPES = ["NONE", "BMP", "GIF", "JPEG", "PNG", "TIFF", "EMF", "WMF", "EXIF"
 DEFECTS = ["NONE", "UNKNOWN", "JPEG_END_MARKER_IS_ABSENT", "BLOCKINESS", "BLURRING"]
 
 
-class CompareOptions(ctypes.Structure):
-    _fields_ = [("checkOnEquality", ctypes.c_int32), ("transformedImage", ctypes.c_int32),
-                ("sizeControl", ctypes.c_int32), ("typeControl", ctypes.c_int32),
-                ("ratioControl", ctypes.c_int32), ("thresholdDifference", ctypes.c_int32),
-                ("minimalImageSize", ctypes.c_int32), ("maximalImageSize", ctypes.c_int32),
-                ("compareInsideOneFolder", ctypes.c_int32), ("compareInsideOneSearchPath", ctypes.c_int32),
-                ("algorithmComparing", ctypes.c_int32)]
+def compare_options(threshold_type):
+    class CompareOptions(ctypes.Structure):
+        _fields_ = [("checkOnEquality", ctypes.c_int32), ("transformedImage", ctypes.c_int32),
+                    ("sizeControl", ctypes.c_int32), ("typeControl", ctypes.c_int32),
+                    ("ratioControl", ctypes.c_int32), ("thresholdDifference", threshold_type),
+                    ("minimalImageSize", ctypes.c_int32), ("maximalImageSize", ctypes.c_int32),
+                    ("compareInsideOneFolder", ctypes.c_int32), ("compareInsideOneSearchPath", ctypes.c_int32),
+                    ("algorithmComparing", ctypes.c_int32)]
+    return CompareOptions
+
+
+# Builds with fractional thresholds hold it as a double (which also moves
+# the fields after it); older ones as a whole-percent int.
+CompareOptionsInt = compare_options(ctypes.c_int32)
+CompareOptionsDouble = compare_options(ctypes.c_double)
+MAXIMAL_IMAGE_SIZE_DEFAULT = 8196
+
+
+def read_compare_options(core, h):
+    """The engine's compare options in the layout its build uses, told by
+    where the default maximal image size lands (a fresh engine)."""
+    buf = (ctypes.c_byte * 64)()  # room for either layout
+    core.adOptionsGet(h, AD_OPTIONS_COMPARE, buf)
+    for cls in (CompareOptionsDouble, CompareOptionsInt):
+        options = cls.from_buffer_copy(bytes(buf)[:ctypes.sizeof(cls)])
+        if options.maximalImageSize == MAXIMAL_IMAGE_SIZE_DEFAULT:
+            return options
+    sys.exit("unknown compare options layout")
 
 
 class AdvancedOptions(ctypes.Structure):
@@ -105,7 +127,7 @@ def main():
     ap.add_argument("user_dir")
     ap.add_argument("search_dir")
     ap.add_argument("--size", type=int, default=32)
-    ap.add_argument("--threshold", type=int, default=1)
+    ap.add_argument("--threshold", type=float, default=1)
     ap.add_argument("--turbo", type=int, default=1)
     ap.add_argument("--algorithm", type=int, default=1)
     ap.add_argument("--runs", type=int, default=1)
@@ -146,9 +168,10 @@ def main():
     if not h:
         sys.exit("adCreateW failed")
     try:
-        cmp_ = CompareOptions()
-        core.adOptionsGet(h, AD_OPTIONS_COMPARE, ctypes.byref(cmp_))
-        cmp_.thresholdDifference = a.threshold
+        cmp_ = read_compare_options(core, h)
+        if isinstance(cmp_, CompareOptionsInt) and a.threshold != int(a.threshold):
+            sys.exit("this build takes whole-percent thresholds only")
+        cmp_.thresholdDifference = a.threshold if isinstance(cmp_, CompareOptionsDouble) else int(a.threshold)
         cmp_.algorithmComparing = a.algorithm
         cmp_.compareInsideOneFolder = 1
         cmp_.checkOnEquality = 1
