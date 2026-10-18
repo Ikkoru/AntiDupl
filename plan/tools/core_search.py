@@ -2,9 +2,9 @@
 
 Usage:
     python core_search.py DLL_DIR USER_DIR SEARCH_DIR [--size N] [--threshold N]
-                          [--turbo 0|1] [--algorithm 0|1|3] [--runs N] [--use-db]
+                          [--turbo 0|1] [--algorithm 0|1|3|4] [--runs N] [--use-db]
                           [--details] [--collect-threads N] [--transformed]
-                          [--images FILE]
+                          [--images FILE] [--butteraugli-size N] [--frame N]
 
 DLL_DIR     folder holding AntiDupl.dll (e.g. bin\\Release of a build)
 USER_DIR    the engine's user folder (settings, image database); created if
@@ -17,7 +17,9 @@ SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
             that take them (a double in the compare options)
 --turbo     use libjpeg-turbo (default 1)
 --algorithm 0 = mean square, 1 = SSIM (default 1), 3 = local colour (T11;
-            builds with it only)
+            builds with it only), 4 = Butteraugli (T12; builds with it only;
+            the threshold is in Butteraugli's units, and the scores are kept
+            in USER_DIR\\butteraugli.adp for the next run)
 --runs      repeat the search N times in one engine (float-noise checks)
 --use-db    like the GUI's "use database of image": load the image database
             from USER_DIR\\images\\<size>x<size> before each search and save it
@@ -30,6 +32,9 @@ SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
             and mirror image dupls")
 --images FILE      also write every image that is in a result, with the
             core's type, size, blockiness and blurring, as UTF-8 TSV
+--butteraugli-size N  longest side of the images Butteraugli compares
+            (builds with T12 only; the build's default otherwise)
+--frame N   Ignore frame width in % (AntiDupl's 0 to 12; default 0)
 
 Prints one line per pair: difference with full precision, the 2-decimal value
 the UI shows, and the two file names; for a pair found as a rotated or mirrored
@@ -69,17 +74,22 @@ def compare_options(threshold_type):
 CompareOptionsInt = compare_options(ctypes.c_int32)
 CompareOptionsDouble = compare_options(ctypes.c_double)
 MAXIMAL_IMAGE_SIZE_DEFAULT = 8196
+# Builds with Butteraugli (T12) have its working size after the algorithm,
+# in what is padding in the double layout of older builds.
+BUTTERAUGLI_SIZE_OFFSET, BUTTERAUGLI_SIZES = 52, (512, 768)  # the defaults builds have had
 
 
 def read_compare_options(core, h):
     """The engine's compare options in the layout its build uses, told by
-    where the default maximal image size lands (a fresh engine)."""
+    where the default maximal image size lands (a fresh engine), and the
+    buffer they are a view of: adOptionsSet gets the buffer, so fields this
+    script doesn't know keep the values the engine gave."""
     buf = (ctypes.c_byte * 64)()  # room for either layout
     core.adOptionsGet(h, AD_OPTIONS_COMPARE, buf)
     for cls in (CompareOptionsDouble, CompareOptionsInt):
-        options = cls.from_buffer_copy(bytes(buf)[:ctypes.sizeof(cls)])
+        options = cls.from_buffer(buf)
         if options.maximalImageSize == MAXIMAL_IMAGE_SIZE_DEFAULT:
-            return options
+            return options, buf
     sys.exit("unknown compare options layout")
 
 
@@ -136,6 +146,8 @@ def main():
     ap.add_argument("--collect-threads", type=int)
     ap.add_argument("--transformed", action="store_true")
     ap.add_argument("--images")
+    ap.add_argument("--butteraugli-size", type=int)
+    ap.add_argument("--frame", type=int, default=0)
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -147,6 +159,9 @@ def main():
     if any(os.path.exists(os.path.join(parent, exe)) for exe in ("AntiDupl.NET.WinForms.exe", "AntiDupl.NET.exe")):
         sys.exit("refusing to use the settings folder of an installed AntiDupl (the program sits next to it)")
     os.makedirs(a.user_dir, exist_ok=True)
+    # Given a folder that doesn't exist, the core searches elsewhere.
+    if not os.path.isdir(a.search_dir):
+        sys.exit(f"no such folder: {a.search_dir}")
 
     os.add_dll_directory(os.path.abspath(a.dll_dir))
     core = ctypes.CDLL(os.path.join(os.path.abspath(a.dll_dir), "AntiDupl.dll"))
@@ -168,7 +183,7 @@ def main():
     if not h:
         sys.exit("adCreateW failed")
     try:
-        cmp_ = read_compare_options(core, h)
+        cmp_, cmp_buf = read_compare_options(core, h)
         if isinstance(cmp_, CompareOptionsInt) and a.threshold != int(a.threshold):
             sys.exit("this build takes whole-percent thresholds only")
         cmp_.thresholdDifference = a.threshold if isinstance(cmp_, CompareOptionsDouble) else int(a.threshold)
@@ -176,12 +191,18 @@ def main():
         cmp_.compareInsideOneFolder = 1
         cmp_.checkOnEquality = 1
         cmp_.transformedImage = 1 if a.transformed else 0
-        assert core.adOptionsSet(h, AD_OPTIONS_COMPARE, ctypes.byref(cmp_)) == 0
+        if a.butteraugli_size is not None:
+            size = ctypes.c_int32.from_buffer(cmp_buf, BUTTERAUGLI_SIZE_OFFSET)
+            if not isinstance(cmp_, CompareOptionsDouble) or size.value not in BUTTERAUGLI_SIZES:
+                sys.exit("this build has no Butteraugli working size")
+            size.value = a.butteraugli_size
+        assert core.adOptionsSet(h, AD_OPTIONS_COMPARE, cmp_buf) == 0
         adv = AdvancedOptions()
         core.adOptionsGet(h, AD_OPTIONS_ADVANCED, ctypes.byref(adv))
         adv.reducedImageSize = a.size
         adv.useLibJpegTurbo = a.turbo
         adv.mistakeDataBase = 0
+        adv.ignoreFrameWidth = a.frame
         if a.collect_threads is not None:
             adv.collectThreadCount = a.collect_threads
         assert core.adOptionsSet(h, AD_OPTIONS_ADVANCED, ctypes.byref(adv)) == 0
