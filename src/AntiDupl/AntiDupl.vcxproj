@@ -94,7 +94,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="adAvif.cpp" />
+    <ClCompile Include="3rd\butteraugli\butteraugli\butteraugli.cc">
+      <CompileAs>CompileAsCpp</CompileAs>
+      <AdditionalIncludeDirectories>$(ProjectDir)3rd\butteraugli;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
     <ClCompile Include="adBlurringDetector.cpp" />
+    <ClCompile Include="adButteraugli.cpp">
+      <AdditionalIncludeDirectories>$(ProjectDir)3rd\butteraugli;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
     <ClCompile Include="adDataCollector.cpp" />
     <ClCompile Include="adDds.cpp" />
     <ClCompile Include="adDump.cpp" />
@@ -143,7 +150,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="adAvif.h" />
+    <ClInclude Include="3rd\butteraugli\butteraugli\butteraugli.h" />
     <ClInclude Include="adBlurringDetector.h" />
+    <ClInclude Include="adButteraugli.h" />
     <ClInclude Include="adConfig.h" />
     <ClInclude Include="adDataCollector.h" />
     <ClInclude Include="adDds.h" />

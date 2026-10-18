@@ -45,6 +45,15 @@ namespace AntiDupl.NET.Core
         public bool compareInsideOneFolder;
         public bool compareInsideOneSearchPath;
         public AlgorithmComparing algorithmComparing;
+        /// <summary>
+        /// Longest side of the images Butteraugli compares. The initial value
+        /// is what a settings file saved without it loads with.
+        /// </summary>
+        public int butteraugliSize = BUTTERAUGLI_SIZE_DEFAULT;
+
+        public const int BUTTERAUGLI_SIZE_DEFAULT = 768;
+        /// <summary>The working sizes the option lists offer.</summary>
+        public static readonly int[] BUTTERAUGLI_SIZES = { 384, 512, 768, 1024 };
 
         public CoreCompareOptions()
         {
@@ -63,6 +72,7 @@ namespace AntiDupl.NET.Core
             maximalImageSize = compareOptions.maximalImageSize;
             compareInsideOneFolder = compareOptions.compareInsideOneFolder;
             compareInsideOneSearchPath = compareOptions.compareInsideOneSearchPath;
+            butteraugliSize = compareOptions.butteraugliSize;
         }
 
         public CoreCompareOptions(ref CoreDll.adCompareOptions compareOptions)
@@ -78,6 +88,7 @@ namespace AntiDupl.NET.Core
             maximalImageSize = compareOptions.maximalImageSize;
             compareInsideOneFolder = compareOptions.compareInsideOneFolder != CoreDll.FALSE;
             compareInsideOneSearchPath = compareOptions.compareInsideOneSearchPath != CoreDll.FALSE;
+            butteraugliSize = compareOptions.butteraugliSize;
         }
 
         public void ConvertTo(ref CoreDll.adCompareOptions compareOptions)
@@ -93,6 +104,7 @@ namespace AntiDupl.NET.Core
             compareOptions.maximalImageSize = maximalImageSize;
             compareOptions.compareInsideOneFolder = compareInsideOneFolder ? CoreDll.TRUE : CoreDll.FALSE;
             compareOptions.compareInsideOneSearchPath = compareInsideOneSearchPath ? CoreDll.TRUE : CoreDll.FALSE;
+            compareOptions.butteraugliSize = butteraugliSize;
         }
 
         public CoreCompareOptions Clone()
@@ -135,7 +147,8 @@ namespace AntiDupl.NET.Core
                 minimalImageSize == compareOptions.minimalImageSize &&
                 maximalImageSize == compareOptions.maximalImageSize &&
                 compareInsideOneFolder == compareOptions.compareInsideOneFolder &&
-                compareInsideOneSearchPath == compareOptions.compareInsideOneSearchPath;
+                compareInsideOneSearchPath == compareOptions.compareInsideOneSearchPath &&
+                butteraugliSize == compareOptions.butteraugliSize;
         }
 
         public bool CheckOnEquality
@@ -245,6 +258,16 @@ namespace AntiDupl.NET.Core
             {
                 algorithmComparing = value;
                 NotifyPropertyChanged("AlgorithmComparing");
+            }
+        }
+
+        public int ButteraugliSize
+        {
+            get { return butteraugliSize; }
+            set
+            {
+                butteraugliSize = value;
+                NotifyPropertyChanged("ButteraugliSize");
             }
         }
 
