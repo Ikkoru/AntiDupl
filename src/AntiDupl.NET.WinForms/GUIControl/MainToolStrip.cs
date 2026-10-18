@@ -57,7 +57,7 @@ namespace AntiDupl.NET.WinForms
         // The algorithm list's entries in order: its index is not the enum's
         // value, which leaves a gap where Dinov2 is.
         private static readonly AlgorithmComparing[] ALGORITHMS =
-            { AlgorithmComparing.SquaredSum, AlgorithmComparing.SSIM, AlgorithmComparing.LocalColor };
+            { AlgorithmComparing.SquaredSum, AlgorithmComparing.SSIM, AlgorithmComparing.LocalColor, AlgorithmComparing.Butteraugli };
         // The algorithm the threshold list was filled for.
         private AlgorithmComparing m_thresholdAlgorithm;
         // Set while the lists are changed from code, whose selection events
@@ -124,6 +124,7 @@ namespace AntiDupl.NET.WinForms
             m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_SquaredSum);
             m_algorithmComparingComboBox.Items.Add("SSIM");
             m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_LocalColor);
+            m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_Butteraugli);
 
             m_undoButton = InitFactory.ToolButton.Create("UndoButton", null, m_mainMenu.UndoAction);
             m_redoButton = InitFactory.ToolButton.Create("RedoButton", null, m_mainMenu.RedoAction);
@@ -234,7 +235,7 @@ namespace AntiDupl.NET.WinForms
         private void FillThresholds(AlgorithmComparing algorithm)
         {
             m_thresholdAlgorithm = algorithm;
-            CoreOptionsForm.FillThresholds(m_thresholdDifferenceComboBox.ComboBox, CoreOptionsForm.ThresholdMax(algorithm));
+            CoreOptionsForm.FillThresholds(m_thresholdDifferenceComboBox.ComboBox, algorithm);
         }
 
         public void SetViewMode(ResultsOptions.ViewMode viewMode)
@@ -305,7 +306,8 @@ namespace AntiDupl.NET.WinForms
                 m_settingItems = true;
                 FillThresholds(algorithm);
                 m_settingItems = false;
-                CoreOptionsForm.SelectThreshold(m_thresholdDifferenceComboBox.ComboBox, CoreOptionsForm.ThresholdDefault(algorithm));
+                CoreOptionsForm.SelectThreshold(m_thresholdDifferenceComboBox.ComboBox,
+                    CoreOptionsForm.ThresholdDefault(algorithm, m_coreOptions.compareOptions.butteraugliSize));
             }
         }
     }

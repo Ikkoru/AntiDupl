@@ -96,7 +96,9 @@ namespace AntiDupl.NET.WinForms
             s.CoreOptionsForm_AlgorithmComparingLabeledComboBox_Text = "Algorithm of comparing of images";
             s.CoreOptionsForm_AlgorithmComparingLabeledComboBox_SquaredSum = "Mean square difference";
             s.CoreOptionsForm_AlgorithmComparingLabeledComboBox_LocalColor = "Local colour difference";
+            s.CoreOptionsForm_AlgorithmComparingLabeledComboBox_Butteraugli = "Perceptual (Butteraugli)";
             s.CoreOptionsForm_ThresholdDifferenceLabeledComboBox_Text = "Threshold difference";
+            s.CoreOptionsForm_ButteraugliSizeLabeledComboBox_Text = "Size Butteraugli compares at (longest side)";
             s.CoreOptionsForm_MinimalImageSizeLabeledIntegerEdit_Text = "Minimal image width/height";
             s.CoreOptionsForm_MaximalImageSizeLabeledIntegerEdit_Text = "Maximal image width/height";
             s.CoreOptionsForm_CompareInsideOneSearchPathCheckBox_Text = "Compare images from one path of search with one another";
