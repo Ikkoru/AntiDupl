@@ -183,7 +183,7 @@ Matching every pair of a large collection is too slow even at 1 ms, so a crop se
 * **With upstream's build** (grey, bilinear; SSIM or mean square; whole-percent thresholds): SSIM at 32 px sorts copies before versions best (AUC 0.956, against 0.930 at 128 px) and at 1 % returns every copy; mean square returns fewer versions at 1–2 % but misses processed copies.
 * **T10** (done on the personal branch): area resampling for every algorithm's reduced images.
 * **T11** (done on the personal branch, threshold default 4 %): local colour difference at 64 px: the best cheap algorithm for every plain copy, compression and upscaling included.
-* **T12:** Butteraugli as a slow second look at the candidates, at 512 px (1024 px for copies under a quarter of the size).
+* **T12** (done on the personal branch): Butteraugli as a slow second look at local colour's candidates; through the core, 768 px separates every copy, the tiny ones too, from every version ([02, mode 4](02-comparison-modes.md#mode-4--perceptual-butteraugli-slow-most-accurate-t12-on-the-personal-branch)).
 * **Crops** (T19): a new kind of search in two stages (above).
 * **The worse copy:** the rule above with the JPEG trace, when hints are reworked ([06 § S4](06-stretch-and-ameliorations.md) A3); the JPEG quality, its trace and bytes per pixel as columns (A2) would show the user the same evidence. For lossy steps that aren't JPEG: a learned score such as TOPIQ-NR as the tie-breaker; the WebP trace by re-encoding fell short in its calibration (above).
 * Hashes, embeddings (SSCD, DINOv2, SigLIP) and the learned full-reference metrics (LPIPS, DISTS) are no help in telling copies from versions; the embeddings are the candidate finders for crops.
