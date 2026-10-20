@@ -81,6 +81,26 @@ namespace AntiDupl.NET.WinForms
         }
 
         /// <summary>
+        /// What a threshold is measured on: the algorithm, and for Butteraugli
+        /// also the working size, since its scores grow with it.
+        /// </summary>
+        static public string ThresholdScale(AlgorithmComparing algorithm, int butteraugliSize)
+        {
+            return algorithm == AlgorithmComparing.Butteraugli ? algorithm + " " + butteraugliSize : algorithm.ToString();
+        }
+
+        /// <summary>
+        /// Keeps the threshold in use on the scale being left, and returns the
+        /// one for the new scale: the one last used there, else its default.
+        /// </summary>
+        static public double SwitchThreshold(Options options, string from, double threshold,
+            AlgorithmComparing algorithm, int butteraugliSize)
+        {
+            options.RememberThreshold(from, threshold);
+            return options.RememberedThreshold(ThresholdScale(algorithm, butteraugliSize), ThresholdDefault(algorithm, butteraugliSize));
+        }
+
+        /// <summary>
         /// The thresholds the lists offer for an algorithm. Butteraugli's
         /// copies and versions lie apart by points, not fractions: halves up
         /// to 10, then whole points to 20, then fives.
@@ -960,20 +980,29 @@ namespace AntiDupl.NET.WinForms
                 m_ignoreFrameWidthLabeledComboBox.SelectedValue = (m_newCoreOptions.advancedOptions.ignoreFrameWidth + step - 1) / step * step;
             }
 
-            // Another algorithm brings its own range and starting threshold:
-            // the same percentage means different things to each. So does
-            // another working size to Butteraugli, on the same list.
+            // Another algorithm has its own range: the same percentage means
+            // different things to each. So does another working size to
+            // Butteraugli, on the same list. Each keeps the threshold last
+            // used with it.
             AlgorithmComparing algorithm = (AlgorithmComparing)m_algorithmComparingLabeledComboBox.SelectedValue;
             int butteraugliSize = m_butteraugliSizeLabeledComboBox.SelectedValue;
             if (algorithm != m_thresholdAlgorithm ||
                 (algorithm == AlgorithmComparing.Butteraugli && butteraugliSize != m_thresholdButteraugliSize))
             {
-                m_thresholdButteraugliSize = butteraugliSize;
-                if (algorithm != m_thresholdAlgorithm)
-                    FillThresholds(m_thresholdDifferenceLabeledComboBox.comboBox, algorithm);
-                m_thresholdAlgorithm = algorithm;
-                SelectThreshold(m_thresholdDifferenceLabeledComboBox.comboBox, ThresholdDefault(algorithm, butteraugliSize));
+                double threshold = SwitchThreshold(m_options, ThresholdScale(m_thresholdAlgorithm, m_thresholdButteraugliSize),
+                    m_newCoreOptions.compareOptions.thresholdDifference, algorithm, butteraugliSize);
+                ShowThresholds(algorithm, butteraugliSize, threshold);
             }
+        }
+
+        // The threshold list for an algorithm and working size, showing the threshold.
+        private void ShowThresholds(AlgorithmComparing algorithm, int butteraugliSize, double threshold)
+        {
+            if (algorithm != m_thresholdAlgorithm)
+                FillThresholds(m_thresholdDifferenceLabeledComboBox.comboBox, algorithm);
+            m_thresholdAlgorithm = algorithm;
+            m_thresholdButteraugliSize = butteraugliSize;
+            SelectThreshold(m_thresholdDifferenceLabeledComboBox.comboBox, threshold);
         }
 
         private void OnOptionChanged(object sender, EventArgs e)
@@ -1019,6 +1048,9 @@ namespace AntiDupl.NET.WinForms
             m_defaultCoreOptions.CopyTo(ref m_newCoreOptions);
             m_inited = false;
             GetOptions();
+            // The default threshold, not the one last used with the default algorithm.
+            ShowThresholds(m_newCoreOptions.compareOptions.algorithmComparing,
+                m_newCoreOptions.compareOptions.butteraugliSize, m_newCoreOptions.compareOptions.thresholdDifference);
             m_inited = true;
             UpdateItemsEnabling();
         }

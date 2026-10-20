@@ -80,6 +80,27 @@ namespace AntiDupl.NET.WinForms
 
         public string coreOptionsFileName = GetDefaultCoreOptionsFileName();
 
+        /// <summary>
+        /// The threshold last used with each algorithm (Butteraugli: with
+        /// each working size), so that switching back to it restores it.
+        /// </summary>
+        public List<ThresholdChoice> thresholdChoices = new List<ThresholdChoice>();
+
+        public double RememberedThreshold(string scale, double fallback)
+        {
+            ThresholdChoice choice = thresholdChoices.Find(c => c.scale == scale);
+            return choice != null ? choice.threshold : fallback;
+        }
+
+        public void RememberThreshold(string scale, double threshold)
+        {
+            ThresholdChoice choice = thresholdChoices.Find(c => c.scale == scale);
+            if (choice == null)
+                thresholdChoices.Add(new ThresholdChoice { scale = scale, threshold = threshold });
+            else
+                choice.threshold = threshold;
+        }
+
         /// <summary>Set when Load fell back to the defaults.</summary>
         [XmlIgnore]
         public UnreadableSettingsFile LoadProblem;
@@ -148,6 +169,7 @@ namespace AntiDupl.NET.WinForms
             imageDiff2ExecutablePath = options.imageDiff2ExecutablePath;
             imageDiff2ExecutableArguments = options.imageDiff2ExecutableArguments;
             colorMode = options.colorMode;
+            thresholdChoices = ThresholdChoice.Clone(options.thresholdChoices);
         }
 
         public void Save()
@@ -191,6 +213,7 @@ namespace AntiDupl.NET.WinForms
             options.imageDiff2ExecutablePath = imageDiff2ExecutablePath;
             options.imageDiff2ExecutableArguments = imageDiff2ExecutableArguments;
             options.colorMode = colorMode;
+            options.thresholdChoices = ThresholdChoice.Clone(thresholdChoices);
         }
 
         public static void PathCopy(string[] source, ref string[] destination)
@@ -273,6 +296,18 @@ namespace AntiDupl.NET.WinForms
             if (!coreOptionsFileName.Equals(options.coreOptionsFileName))
                 return false;
             return true;
+        }
+    }
+
+    /// <summary>A threshold and the scale it was chosen on (CoreOptionsForm.ThresholdScale).</summary>
+    public class ThresholdChoice
+    {
+        public string scale;
+        public double threshold;
+
+        public static List<ThresholdChoice> Clone(List<ThresholdChoice> choices)
+        {
+            return choices.ConvertAll(c => new ThresholdChoice { scale = c.scale, threshold = c.threshold });
         }
     }
 }
