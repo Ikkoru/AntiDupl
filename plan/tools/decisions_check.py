@@ -40,14 +40,13 @@ def decision(action, pair):
     return None
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("log")
-    ap.add_argument("--top", type=int, default=15)
-    ap.add_argument("--tsv")
-    a = ap.parse_args()
-    events = [json.loads(line) for line in open(a.log, encoding="utf-8") if line.strip()]
+def read_log(path):
+    return [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
 
+
+def replay(events):
+    """Each pair's info as last seen and its last decision, undo and redo
+    applied: ({key: pair}, {key: decision})."""
     pairs = {}        # key -> pair info as last seen
     decided = {}      # key -> decision
     done, undone = [], []   # stacks of applied actions: [(key, previous decision)]
@@ -78,6 +77,16 @@ def main():
             for k, _, after in applied:
                 decided[k] = after
             done.append(applied)
+    return pairs, decided
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("log")
+    ap.add_argument("--top", type=int, default=15)
+    ap.add_argument("--tsv")
+    a = ap.parse_args()
+    pairs, decided = replay(read_log(a.log))
 
     counts = {}
     for d in decided.values():
