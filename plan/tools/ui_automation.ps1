@@ -33,11 +33,21 @@ $script:TS = [Windows.Automation.TreeScope]
 
 function New-AdCondition($property, $value) { New-Object Windows.Automation.PropertyCondition($property, $value) }
 
+# Every program Start-AdBuild started, for Stop-AdStrays.
+$script:AdStarted = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
+
+# Ends, by process id, every build this script started that still runs: for
+# a finally block, so a check that throws leaves no program behind.
+function Stop-AdStrays() {
+    foreach ($p in $script:AdStarted) { if (-not $p.HasExited) { Stop-Process -Id $p.Id; "ended a leftover build ($($p.Id))" } }
+}
+
 # Starts the build with a scratch settings folder and waits for its main
 # window (the one with a tool bar). Returns @(process, main window).
 function Start-AdBuild([string]$Exe, [string]$s, [int]$TimeoutSeconds = 40) {
     if (-not (Test-Path -LiteralPath $s -PathType Container)) { throw "no settings folder: $s" }
     $p = Start-Process -FilePath $Exe -ArgumentList '-s', "`"$s`"" -PassThru
+    $script:AdStarted.Add($p)
     $byPid = New-AdCondition $AE::ProcessIdProperty $p.Id
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $main = $null

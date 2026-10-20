@@ -9,6 +9,7 @@
 param([string]$Exe, [string]$s, [string]$Shot)
 . (Join-Path $PSScriptRoot 'ui_automation.ps1')
 
+try {
 $p, $main = Start-AdBuild $Exe $s
 $dialog = Open-AdOptions $p $main
 $algorithm = $null; $threshold = $null; $size = $null
@@ -46,3 +47,4 @@ Select-AdListItem $tbAlgorithm 'Local colour difference'
 Select-AdListItem $tbAlgorithm 'Perceptual (Butteraugli)'
 "tool bar: chose Butteraugli -> threshold '$($tbThreshold.Current.Name)'"
 Stop-AdBuild $p $main
+} finally { Stop-AdStrays }
