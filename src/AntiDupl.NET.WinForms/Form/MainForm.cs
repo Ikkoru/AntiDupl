@@ -58,6 +58,7 @@ namespace AntiDupl.NET.WinForms
             m_commandLine = commandLine;
             m_core = new CoreLib(Resources.UserPath);
             m_options = options;
+            Application.AddMessageFilter(new DecisionLog.HotKeyWatcher(m_options));
             if (m_options.loadProfileOnLoading)
                 m_coreOptions = CoreOptions.Load(m_options.coreOptionsFileName, m_core, m_options.onePath);
             else

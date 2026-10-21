@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Windows.Forms;
 
 using AntiDupl.NET.Core;
 using AntiDupl.NET.Core.Original;
@@ -61,14 +62,7 @@ namespace AntiDupl.NET.WinForms
                     w.WriteString("detail", detail);
                 w.WriteNumber("row", row);
                 w.WriteNumber("rows", rows);
-                if (coreOptions != null)
-                {
-                    w.WriteStartObject("settings");
-                    w.WriteString("algorithm", coreOptions.compareOptions.algorithmComparing.ToString());
-                    w.WriteNumber("threshold", coreOptions.compareOptions.thresholdDifference);
-                    w.WriteNumber("reducedImageSize", coreOptions.advancedOptions.reducedImageSize);
-                    w.WriteEndObject();
-                }
+                WriteSettings(w, coreOptions);
                 w.WriteStartArray("pairs");
                 foreach (CoreResult result in results)
                 {
@@ -100,6 +94,100 @@ namespace AntiDupl.NET.WinForms
         static public void Event(string name)
         {
             Write(w => w.WriteString("event", name));
+        }
+
+        /// <summary>
+        /// A finished (or stopped) search: its folders and settings, how many
+        /// images it looked at, and what it found, so a search that found
+        /// nothing leaves a trace too.
+        /// </summary>
+        static public void Search(CoreOptions coreOptions, CoreStatistic statistic, TimeSpan duration)
+        {
+            Write(w =>
+            {
+                w.WriteString("event", "search");
+                WriteSettings(w, coreOptions);
+                w.WriteStartArray("folders");
+                foreach (CorePathWithSubFolder path in coreOptions.searchPath)
+                    w.WriteStringValue(path.path);
+                w.WriteEndArray();
+                w.WriteNumber("images", statistic.searchedImageNumber);
+                w.WriteNumber("pairs", statistic.duplImagePairNumber);
+                w.WriteNumber("defects", statistic.defectImageNumber);
+                w.WriteNumber("seconds", Math.Round(duration.TotalSeconds, 1));
+            });
+        }
+
+        /// <summary>
+        /// Every press of a configured hot key, whatever has the keyboard
+        /// focus, so a press that did nothing can be traced: the control and
+        /// window it went to, and whether an action's progress window was
+        /// open (it takes the focus and drops every key). Only hot keys and
+        /// undo and redo are noted, never other typing.
+        /// </summary>
+        public sealed class HotKeyWatcher : IMessageFilter
+        {
+            private const int WM_KEYDOWN = 0x0100, WM_SYSKEYDOWN = 0x0104;
+            private readonly Options m_options;
+
+            public HotKeyWatcher(Options options)
+            {
+                m_options = options;
+            }
+
+            public bool PreFilterMessage(ref Message m)
+            {
+                if (m.Msg != WM_KEYDOWN && m.Msg != WM_SYSKEYDOWN)
+                    return false;
+                Keys key = (Keys)(int)(long)m.WParam | Control.ModifierKeys;
+                string hotKey = HotKeyName(key);
+                if (hotKey == null)
+                    return false;
+                Control target = Control.FromChildHandle(m.HWnd);
+                Form form = target?.FindForm();
+                bool busy = false;
+                foreach (Form open in Application.OpenForms)
+                    busy |= open is ProgressForm;
+                bool repeat = ((long)m.LParam & 0x40000000) != 0; // held down
+                Write(w =>
+                {
+                    w.WriteString("event", "key");
+                    w.WriteString("key", key.ToString());
+                    w.WriteString("hotKey", hotKey);
+                    w.WriteString("to", target != null ? target.GetType().Name : "");
+                    w.WriteString("window", form != null ? form.GetType().Name : "");
+                    w.WriteBoolean("progressWindowOpen", busy);
+                    if (repeat)
+                        w.WriteBoolean("repeat", true);
+                });
+                return false;
+            }
+
+            // The hot key's action, as ResultsListView.MakeAction(Keys) picks it, or null.
+            private string HotKeyName(Keys key)
+            {
+                if (key == (Keys.Z | Keys.Control))
+                    return "Undo";
+                if (key == (Keys.Y | Keys.Control))
+                    return "Redo";
+                for (HotKeyOptions.Action a = 0; a < HotKeyOptions.Action.Size; a++)
+                    if (m_options.hotKeyOptions.Get(a) == key)
+                        return a.ToString();
+                return null;
+            }
+        }
+
+        static private void WriteSettings(Utf8JsonWriter w, CoreOptions coreOptions)
+        {
+            if (coreOptions == null)
+                return;
+            w.WriteStartObject("settings");
+            w.WriteString("algorithm", coreOptions.compareOptions.algorithmComparing.ToString());
+            w.WriteNumber("threshold", coreOptions.compareOptions.thresholdDifference);
+            w.WriteNumber("reducedImageSize", coreOptions.advancedOptions.reducedImageSize);
+            if (coreOptions.compareOptions.algorithmComparing == AntiDupl.NET.Core.Enums.AlgorithmComparing.Butteraugli)
+                w.WriteNumber("butteraugliSize", coreOptions.compareOptions.butteraugliSize);
+            w.WriteEndObject();
         }
 
         static private void WritePair(Utf8JsonWriter w, CoreResult result)

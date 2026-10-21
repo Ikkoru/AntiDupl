@@ -150,7 +150,7 @@ public static string FormatDifference(double d) =>
 
 Styling: `d == 0` → bold + "identical" colour; `0 < d < 1e-5` → regular + same colour, tooltip "Pixel-identical (file bytes differ)"; tooltip on every cell with `d.ToString("R")`. Colours come from the theme helper of [04](04-dark-mode.md) (today's `LightGreen` is barely readable on white). Sorting is done in the core on the raw double ([adResult.cpp:238-241](../src/AntiDupl/adResult.cpp#L238)), so it stays exact.
 
-**As implemented** (`feat/difference-display`): `DifferenceFormat` (`ToString`, `IsIdentical`, `IsByteIdentical`, `ToExactString` with six decimals for the tooltip); `DifferenceFormat` holds the identical colours itself, one per theme (green for byte-identical, orange for pixel-identical; tasks.md T9), since the theme helper is on the separate dark-mode branch.
+**As implemented** (`feat/difference-display`): `DifferenceFormat` (`ToString`, `IsIdentical`, `IsByteIdentical`, `ToExactString` with six decimals for the tooltip); `DifferenceFormat` holds the identical colours itself, one per theme (green for byte-identical, orange for pixel-identical; tasks-done.md T9), since the theme helper is on the separate dark-mode branch.
 
 ## Optional G — area resampling for the 128×128 plane
 

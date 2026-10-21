@@ -34,7 +34,7 @@ The WinForms app targets `net10.0-windows7.0` ([AntiDupl.NET.WinForms.csproj](..
 4. **Grid headers.** In `ResultsListView.InitializeComponents`: `EnableHeadersVisualStyles = !Application.IsDarkModeEnabled;` and set `ColumnHeadersDefaultCellStyle.BackColor/ForeColor` and `GridColor` from `SystemColors`.
 5. **Verify every surface** (things the framework may leave light): Options dialog `TabControl` ([CoreOptionsForm.cs:171](../src/AntiDupl.NET.WinForms/Form/CoreOptionsForm.cs#L171)) — owner-draw the tab headers if they stay light; combo-box drop-downs; `NumericUpDown`; check boxes; grid scrollbars; tooltips; About panel; Paths/HotKeys/Columns/Progress/StartFinish forms; toolbar PNG icons on a dark background. Native folder pickers follow the OS theme on their own.
 
-**As implemented** (PR #253; tasks.md T7, T9, T21): the menu reads *As in Windows* / *Light* / *Dark*, default Light; the colours were chosen with the user and live in `ThemeColors` (and `DifferenceFormat` for the identical colours), so the hex values in the table above are the first proposal, not the result.
+**As implemented** (PR #253; tasks-done.md T7, T9, T21): the menu reads *As in Windows* / *Light* / *Dark*, default Light; the colours were chosen with the user and live in `ThemeColors` (and `DifferenceFormat` for the identical colours), so the hex values in the table above are the first proposal, not the result.
 
 ## Acceptance
 

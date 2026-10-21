@@ -1,6 +1,6 @@
 # AntiDupl local build — research results and implementation plan
 
-Research and designs for the fork `Ikkoru/AntiDupl` of `ermig1979/AntiDupl`, forked at `e06d082` (v2.3.13). The checklist is in [`../tasks.md`](../tasks.md); this folder holds the evidence and the designs. The bug analyses in 01 and 03 describe v2.3.13: their "today", "current" and line links are that version's, and upstream has merged most of the fixes since (status per task in tasks.md).
+Research and designs for the fork `Ikkoru/AntiDupl` of `ermig1979/AntiDupl`, forked at `e06d082` (v2.3.13). The checklist is in [`../tasks.md`](../tasks.md); this folder holds the evidence and the designs. The bug analyses in 01 and 03 describe v2.3.13: their "today", "current" and line links are that version's, and upstream has merged most of the fixes since (status per task in tasks.md and, once finished, [`../tasks-done.md`](../tasks-done.md)).
 
 ## The user's setup (from `options.xml` / `default.xml`)
 
@@ -39,7 +39,7 @@ Reproduction (any OS with Python): `tools/repro_difference.py` prints 0.217453 /
 
 ## Upstream PRs
 
-Upstream's active maintainer is Edi61. Each PR's state is in [`../tasks.md`](../tasks.md), the rules for making one in [`../CLAUDE.md`](../CLAUDE.md), and what was posted in the workspace's `reference\github-drafts\README.md`.
+Upstream's active maintainer is Edi61. Each PR's state is in [`../tasks.md`](../tasks.md) or [`../tasks-done.md`](../tasks-done.md), the rules for making one in [`../CLAUDE.md`](../CLAUDE.md), and what was posted in the workspace's `reference\github-drafts\README.md`.
 
 ## Build & verify
 

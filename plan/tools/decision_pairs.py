@@ -11,6 +11,10 @@ WORK_DIR  a scratch folder: pairs\\<n>\\ gets the two images as <n>a and
           <n>b, pairs.tsv the pairs, scores.tsv every algorithm's value
 --dll     a build with every algorithm (the personal branch's bin\\Release)
 --since   only pairs first seen on or after this date (YYYY-MM-DD)
+--keep    a lasting folder for the run: pairs.tsv, scores.tsv, the report,
+          and the copies of the pairs a later run can't copy again from the
+          archive (deleted ones, whose image leaves the Recycle Bin when it
+          is emptied) or that are worth keeping (linked ones)
 
 An image is found by its logged size and modification time, at its own path,
 at the other image's path (a rename moves one onto the other), or in the
@@ -154,6 +158,7 @@ def main():
     ap.add_argument("work")
     ap.add_argument("--dll", required=True)
     ap.add_argument("--since")
+    ap.add_argument("--keep")
     a = ap.parse_args()
 
     events = dc.read_log(a.log)
@@ -210,7 +215,13 @@ def main():
             f.write(f"{r['n']}\t{r['decision']}\t{r['logged']}\t" +
                     "\t".join(str(scores[r["n"]].get(s[0], "")) for s in SETTINGS) + "\n")
 
-    print(f"{'n':>3} {'decision':8} {'logged':>8} " + " ".join(f"{s[0]:>15}" for s in SETTINGS) + "  files")
+    report = []
+
+    def say(line=""):
+        print(line)
+        report.append(line)
+
+    say(f"{'n':>3} {'decision':8} {'logged':>8} " + " ".join(f"{s[0]:>15}" for s in SETTINGS) + "  files")
     for r in rows:
         cells = []
         complete = "missing" not in (r["from_a"], r["from_b"])
@@ -221,17 +232,30 @@ def main():
             mark = ("*" if wrong else " ") if complete else "?"
             cells.append(f"{'-' if v is None else f'{v:.3f}':>14}{mark}")
         files = "" if r["from_a"] == r["from_b"] == "archive" else f"{r['from_a']} / {r['from_b']}"
-        print(f"{r['n']:>3} {r['decision']:8} {r['logged']:8.4f} " + " ".join(cells) + f"  {files}")
+        say(f"{r['n']:>3} {r['decision']:8} {r['logged']:8.4f} " + " ".join(cells) + f"  {files}")
 
-    print("\nAt each setting's default threshold, over the pairs with both images:")
+    say()
+    say("At each setting's default threshold, over the pairs with both images:")
     whole = [r for r in rows if "missing" not in (r["from_a"], r["from_b"])]
     for name, _, threshold in SETTINGS:
         def paired(decision):
             sel = [r for r in whole if r["decision"] == decision]
             hit = sum(1 for r in sel if scores[r["n"]].get(name, float("inf")) <= threshold)
             return f"{hit} of {len(sel)}"
-        print(f"  {name:16} (<= {threshold:g}): copies you deleted found {paired('deleted')}, "
-              f"variants you kept paired {paired('mistake')}, undecided pairs paired {paired('left')}")
+        say(f"  {name:16} (<= {threshold:g}): copies you deleted found {paired('deleted')}, "
+            f"variants you kept paired {paired('mistake')}, linked pairs paired {paired('linked')}, "
+            f"undecided pairs paired {paired('left')}")
+    with open(os.path.join(a.work, "report.txt"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(report) + "\n")
+
+    if a.keep:
+        os.makedirs(os.path.join(a.keep, "pairs"), exist_ok=True)
+        for name in ("pairs.tsv", "scores.tsv", "report.txt"):
+            shutil.copy2(os.path.join(a.work, name), os.path.join(a.keep, name))
+        for r in rows:
+            src = os.path.join(pair_dir, str(r["n"]))
+            if r["decision"] in ("deleted", "linked") and os.path.isdir(src):
+                shutil.copytree(src, os.path.join(a.keep, "pairs", str(r["n"])), dirs_exist_ok=True)
     return 0
 
 
