@@ -44,6 +44,7 @@ Upstream's active maintainer is Edi61. Each PR's state is in [`../tasks.md`](../
 ## Build & verify
 
 Visual Studio or its Build Tools with the ".NET desktop" + "Desktop C++" workloads, the v143 toolset, .NET 10 SDK, vcpkg integrated (`vcpkg integrate install`); build `src/AntiDupl.sln` x64 Release. Build the vcpkg libraries with v143 as well: MSVC 14.51 (v145, Visual Studio 2026's default) miscompiles libde265 1.0.16 so that `AntiDupl.dll` fails to load ([06](06-stretch-and-ameliorations.md) A12). There are no automated tests in the repo: each document ends with a manual test list, and `tools/` re-computes the expected numbers.
+
 ## Tools
 
 * `ssimulacra2.exe`, `butteraugli_main.exe` — libjxl reference builds, in `jxl-x64-windows-static.zip` (`bin\`) from the libjxl GitHub releases (v0.12.0 checked). They need not be on PATH: `tools/metric_experiment.py --tool-dir <folder>` (or `ANTIDUPL_TOOL_DIRS`) finds them.

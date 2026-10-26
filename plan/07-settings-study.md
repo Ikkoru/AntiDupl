@@ -14,7 +14,7 @@ Four digital illustrations by one artist (2470–4000 px wide, PNG), each with:
 | copy: compression | JPEG q100 and q95 (4:4:4), q90 down to q30 (4:2:0), q85 re-encoded three times; WebP q90/75/50; AVIF q60; JPEG XL distance 1 and 4 |
 | copy: lossy history | converted again after a lossy step: JPEG q60 saved as PNG; the same with 3 px cut from the left and top; JPEG q45 re-saved as JPEG q95; JPEG q85 re-saved as WebP q80; WebP q50 saved as PNG |
 | copy: resolution | 90, 75, 50, 33, 25 and 12 % (Lanczos, PNG); 50 % bilinear and nearest neighbour |
-| copy: web | 50 % as JPEG q85 and q60; 25 % as JPEG q75, q60 and q45; 12 % as JPEG q60 (the q60 and q45 ones also serve the jpegQS check below) |
+| copy: web | 50 % as JPEG q85 and q60; 25 % as JPEG q75, q60 and q45; 12 % as JPEG q60 (the q60 and q45 ones also serve the jpegQS check, [§ Which copy is worse](#which-copy-is-worse)) |
 | copy: upscaled | shrunk to 50 % and 25 %, then blown back up to full size |
 | copy: processed | sharpened, blurred (1 px), brightness +5 %, saturation +15 % |
 | crop | 1, 2, 5, 10, 20 % cut from each side; 10 % from one side; the centre square; 5 % cut, then resized back to full size |
@@ -109,7 +109,7 @@ Versions before the last plain copy, with / without the 12–25 % copies:
 
 * **Area resampling beats AntiDupl's bilinear pipeline at 128 px** for both algorithms (T10), and at 64 px but for mean square in colour with the 12–25 % copies (541 against 530); at 32 px it is mixed. The bilinear pipeline is worst at 128, the user's size: at 128 px area pairs up 101 versions where bilinear pairs up 552. Bilinear-then-halving keeps aliasing that area averaging removes; it also makes a blurred copy look far (221 versions before it at the user's setting, 1 with area) and an upscaled one (528 against 4).
 * **Size 64 or 128, not 16.** With area resampling and the 12–25 % copies counted, 64 px is best in grey and for local colour; in colour, 32 px is better by under 30 versions. Without them, SSIM gains at 128 px (101 against 144), mean square doesn't (160 against 108), and local colour is the same.
-* **Grey or colour** decides the greyscale version (above). Otherwise grey is mostly better: with area resampling at every size, with or without the 12–25 % copies (but for mean square at 128 px without them, 160 against 147); with bilinear resampling it depends on the size.
+* **Grey or colour** decides the greyscale version ([§ Which algorithm finds which kind of copy](#which-algorithm-finds-which-kind-of-copy)). Otherwise grey is mostly better: with area resampling at every size, with or without the 12–25 % copies (but for mean square at 128 px without them, 160 against 147); with bilinear resampling it depends on the size.
 * **Thresholds:** every SSIM setting from 32 px up finds every plain copy below 0.75 % (below 0.28 % without the 12–25 % copies), but AntiDupl's smallest threshold above 0 is 1 %, which at the user's setting pairs up 1,386 of the 3,641 versions (T16). Mean square needs 0.69–2.80 % (0.33–1.72 % without them). Local colour at 64 px needs 4.1 % (1.5 % without them), and 1 % misses nearly a third of the plain copies. At 4 %, the core's default, the study's values pair up 169 versions and miss 3 of the 2,520 plain copy pairs, each the 12 % q60 JPEG against a 25 % copy of one illustration, both of which pair up with the original; the original against its brightness +5 % copy comes at 3.9–4.4 %, around it (5 %: no plain copy missed, 220 versions).
 * What the user's setting pairs up besides copies (without the 12–25 % copies): 202 of the 280 minor variants, 3 medium ones, 77 minor and 238 medium edits, 32 near-final steps. SSIM with area at 128 px: 42 minor variants and 59 minor edits. Local colour at 64 px: 1 minor variant.
 
@@ -184,15 +184,15 @@ Matching every pair of a large collection is too slow even at 1 ms, so a crop se
 * **T10** (done on the personal branch): area resampling for every algorithm's reduced images.
 * **T11** (done on the personal branch, threshold default 4 %): local colour difference at 64 px: the best cheap algorithm for every plain copy, compression and upscaling included.
 * **T12** (done on the personal branch): Butteraugli as a slow second look at local colour's candidates; through the core, 768 px separates every copy, the tiny ones too, from every version ([02, mode 4](02-comparison-modes.md#mode-4--perceptual-butteraugli-slow-most-accurate-t12-on-the-personal-branch)).
-* **Crops** (T19): a new kind of search in two stages (above).
-* **The worse copy:** the rule above with the JPEG trace, when hints are reworked ([06 § S4](06-stretch-and-ameliorations.md) A3); the JPEG quality, its trace and bytes per pixel as columns (A2) would show the user the same evidence. For lossy steps that aren't JPEG: a learned score such as TOPIQ-NR as the tie-breaker; the WebP trace by re-encoding fell short in its calibration (above).
+* **Crops** (T19): a new kind of search in two stages ([§ Crops](#crops)).
+* **The worse copy:** the rule of [§ Which copy is worse](#which-copy-is-worse) with the JPEG trace, when hints are reworked ([06 § S4](06-stretch-and-ameliorations.md) A3); the JPEG quality, its trace and bytes per pixel as columns (A2) would show the user the same evidence. For lossy steps that aren't JPEG: a learned score such as TOPIQ-NR as the tie-breaker; the WebP trace by re-encoding fell short in its calibration (same section).
 * Hashes, embeddings (SSCD, DINOv2, SigLIP) and the learned full-reference metrics (LPIPS, DISTS) are no help in telling copies from versions; the embeddings are the candidate finders for crops.
 
 ## Candidates not tested yet
 
 | Candidate | What it might add | Needs |
 |---|---|---|
-| WebP history in the transform domain: VP8's 4×4 coefficients on its quantiser steps (above) | the lossy steps the JPEG trace can't see | research: a first test finds the lattice and its step, with false lattices from strong JPEGs and upscales |
+| WebP history in the transform domain: VP8's 4×4 coefficients on its quantiser steps ([§ Which copy is worse](#which-copy-is-worse)) | the lossy steps the JPEG trace can't see | research: a first test finds the lattice and its step, with false lattices from strong JPEGs and upscales |
 | a keypoint index (ORB descriptors in an inverted file or hash tables) | crop candidates without an embedding | design work |
 
 ## Limits and growing the set

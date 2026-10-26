@@ -1,6 +1,6 @@
 # 04 — Dark mode (WinForms, Windows 11)
 
-Upstream request: [ermig1979/AntiDupl#115](https://github.com/ermig1979/AntiDupl/issues/115) (2020, open). The user runs Windows 11.
+Upstream request: [ermig1979/AntiDupl#115](https://github.com/ermig1979/AntiDupl/issues/115) (2020, closed by PR #253). The user runs Windows 11.
 
 ## Approach: .NET 10's built-in color mode
 

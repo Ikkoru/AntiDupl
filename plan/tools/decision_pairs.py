@@ -4,11 +4,12 @@ with every algorithm through a build's core, for the settings study
 (plan 07): which algorithm would have shown each pair the user decided on.
 
 Usage:
-    py -3 decision_pairs.py LOG WORK_DIR --dll BIN_RELEASE [--since DATE]
+    py -3 decision_pairs.py LOG WORK_DIR --dll BIN_RELEASE [--since DATE] [--keep DIR]
 
 LOG       the decision log of the user's everyday AntiDupl
 WORK_DIR  a scratch folder: pairs\\<n>\\ gets the two images as <n>a and
-          <n>b, pairs.tsv the pairs, scores.tsv every algorithm's value
+          <n>b, pairs.tsv the pairs, scores.tsv every algorithm's value,
+          report.txt what is printed
 --dll     a build with every algorithm (the personal branch's bin\\Release)
 --since   only pairs first seen on or after this date (YYYY-MM-DD)
 --keep    a lasting folder for the run: pairs.tsv, scores.tsv, the report,

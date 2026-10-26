@@ -36,8 +36,9 @@ namespace AntiDupl.NET.WinForms
     /// Records what the user decides about result pairs, for the settings
     /// study (plan 07): each action on pairs (delete, mistake, hint,
     /// rename, move) with the pairs it was applied to, each pair the user
-    /// looks at, and undo and redo, one JSON object per line in
-    /// decisions.jsonl in the user folder. A pair that was looked at and
+    /// looks at, undo and redo, each search, and each hot key press
+    /// (HotKeyWatcher), one JSON object per line in decisions.jsonl in the
+    /// user folder. A pair that was looked at and
     /// got no action was left as it was. Writing errors are ignored: the
     /// log must never get in the way of the work.
     /// </summary>
