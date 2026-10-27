@@ -6,13 +6,15 @@ Usage: py -3 decisions_check.py <decisions.jsonl> [--top N] [--tsv out.tsv]
        py -3 decisions_check.py <decisions.jsonl> --keys [--since DATE]
 
 Each pair gets its last decision, with undo and redo applied:
-    deleted   a delete (first, second, both), a hint carried out that
-              deletes or replaces one, or a replace (rename first to
+    deleted   a delete (first, second, both, a defect), a hint carried out
+              that deletes or replaces one, or a replace (rename first to
               second: the other image takes its name)
     mistake   marked as a mistake: the user keeps both
-    linked    one renamed (the user names the other in it) or renamed like
-              the other: both kept, as related pictures
-    moved     one moved next to the other, renamed like it or not: both kept
+    linked    one renamed (the user names the other in it), renamed like
+              the other, or its group renamed like a neighbour: both kept,
+              as related pictures
+    moved     one moved next to the other, renamed like it or not, or its
+              group moved to a neighbour's folder: both kept
     left      looked at, no action: both kept for now
 Printed: counts per decision; the deleted pairs with the highest difference
 and the kept pairs (mistake, left) with the lowest, the ones to ask the user
@@ -30,9 +32,10 @@ import datetime
 import json
 import sys
 
-DELETING = {"DeleteFirst", "DeleteSecond", "DeleteBoth", "RenameFirstToSecond", "RenameSecondToFirst"}
-LINKING = {"RenameFirst", "RenameSecond", "RenameFirstLikeSecond", "RenameSecondLikeFirst"}
-MOVING = {"MoveFirstToSecond", "MoveSecondToFirst", "MoveAndRenameFirstToSecond", "MoveAndRenameSecondToFirst"}
+DELETING = {"DeleteDefect", "DeleteFirst", "DeleteSecond", "DeleteBoth", "RenameFirstToSecond", "RenameSecondToFirst"}
+LINKING = {"RenameFirst", "RenameSecond", "RenameFirstLikeSecond", "RenameSecondLikeFirst", "RenameCurrentGroupAs"}
+MOVING = {"MoveFirstToSecond", "MoveSecondToFirst", "MoveAndRenameFirstToSecond", "MoveAndRenameSecondToFirst",
+          "MoveCurrentGroupToDirectory"}
 HINT_DELETING = {"DeleteFirst", "DeleteSecond", "RenameFirstToSecond", "RenameSecondToFirst"}
 # HotKeyOptions.Action names that make a logged action; ShowNeighbours and
 # the difftools log nothing.
@@ -43,7 +46,10 @@ KEY_ANSWER_SECONDS = 2
 
 
 def key(pair):
-    return (pair["first"]["path"], pair.get("second", {}).get("path", ""))
+    # Either order: a sort by one image's property (TResult::OrientFor) can
+    # swap a pair's sides between one event and the next.
+    a, b = pair["first"]["path"], pair.get("second", {}).get("path", "")
+    return (a, b) if not b or a <= b else (b, a)
 
 
 def decision(action, pair):

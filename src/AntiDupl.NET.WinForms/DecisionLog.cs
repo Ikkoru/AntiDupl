@@ -36,14 +36,20 @@ namespace AntiDupl.NET.WinForms
     /// Records what the user decides about result pairs, for the settings
     /// study (plan 07): each action on pairs (delete, mistake, hint,
     /// rename, move) with the pairs it was applied to, each pair the user
-    /// looks at, undo and redo, each search, and each hot key press
-    /// (HotKeyWatcher), one JSON object per line in decisions.jsonl in the
-    /// user folder. A pair that was looked at and
-    /// got no action was left as it was. Writing errors are ignored: the
-    /// log must never get in the way of the work.
+    /// looks at, undo and redo, each search with every result it found,
+    /// each hot key press (HotKeyWatcher), and the program's start and
+    /// close, one JSON object per line in decisions.jsonl in the user
+    /// folder. A pair that was looked at and got no action was left as it
+    /// was. Writing errors are ignored: the log must never get in the way
+    /// of the work. The format is described in plan/decision-log.md, which
+    /// other programs read it by: a change to a field bumps SCHEMA there
+    /// and here.
     /// </summary>
     static public class DecisionLog
     {
+        // Written on every line; lines without it are version 1.
+        public const int SCHEMA = 2;
+
         static private string m_lastViewed;
 
         static private string FilePath { get { return Path.Combine(Resources.UserPath, "decisions.jsonl"); } }
@@ -98,25 +104,85 @@ namespace AntiDupl.NET.WinForms
         }
 
         /// <summary>
+        /// The program started: its version, the time its executable was
+        /// built (the version alone is the same for every personal build),
+        /// and its settings folder.
+        /// </summary>
+        static public void Start()
+        {
+            string built = "";
+            try
+            {
+                built = File.GetLastWriteTimeUtc(Application.ExecutablePath).ToString("o");
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            Write(w =>
+            {
+                w.WriteString("event", "start");
+                w.WriteString("version", Application.ProductVersion);
+                w.WriteString("built", built);
+                w.WriteString("userFolder", Resources.UserPath);
+            });
+        }
+
+        /// <summary>The program is closing, with this many results left in the list.</summary>
+        static public void Close(uint resultsLeft)
+        {
+            Write(w =>
+            {
+                w.WriteString("event", "close");
+                w.WriteNumber("resultsLeft", resultsLeft);
+            });
+        }
+
+        /// <summary>
         /// A finished (or stopped) search: its folders and settings, how many
         /// images it looked at, and what it found, so a search that found
-        /// nothing leaves a trace too.
+        /// nothing leaves a trace too; then one line per result, in the order
+        /// the list shows them first.
         /// </summary>
-        static public void Search(CoreOptions coreOptions, CoreStatistic statistic, TimeSpan duration)
+        static public void Search(CoreOptions coreOptions, CoreStatistic statistic, TimeSpan duration, CoreResult[] results)
         {
             Write(w =>
             {
                 w.WriteString("event", "search");
-                WriteSettings(w, coreOptions);
+                WriteSettings(w, coreOptions, true);
                 w.WriteStartArray("folders");
                 foreach (CorePathWithSubFolder path in coreOptions.searchPath)
                     w.WriteStringValue(path.path);
                 w.WriteEndArray();
+                w.WriteStartArray("ignore");
+                foreach (CorePathWithSubFolder path in coreOptions.ignorePath)
+                    w.WriteStringValue(path.path);
+                w.WriteEndArray();
+                w.WriteBoolean("commandLineFolders", coreOptions.profileSearchPath != null);
                 w.WriteNumber("images", statistic.searchedImageNumber);
                 w.WriteNumber("pairs", statistic.duplImagePairNumber);
                 w.WriteNumber("defects", statistic.defectImageNumber);
                 w.WriteNumber("seconds", Math.Round(duration.TotalSeconds, 1));
             });
+            if (results == null)
+                return;
+            var lines = new List<Action<Utf8JsonWriter>>();
+            for (int i = 0; i < results.Length; i++)
+            {
+                int row = i;
+                CoreResult result = results[i];
+                lines.Add(w =>
+                {
+                    w.WriteString("event", "result");
+                    w.WriteNumber("row", row);
+                    w.WriteNumber("group", result.group);
+                    w.WriteNumber("groupSize", result.groupSize);
+                    WritePair(w, result);
+                });
+            }
+            Write(lines);
         }
 
         /// <summary>
@@ -178,16 +244,34 @@ namespace AntiDupl.NET.WinForms
             }
         }
 
-        static private void WriteSettings(Utf8JsonWriter w, CoreOptions coreOptions)
+        // The comparison settings; full adds the rest of what decides which
+        // pairs a search finds, once per search rather than on every action.
+        static private void WriteSettings(Utf8JsonWriter w, CoreOptions coreOptions, bool full = false)
         {
             if (coreOptions == null)
                 return;
+            CoreCompareOptions compare = coreOptions.compareOptions;
             w.WriteStartObject("settings");
-            w.WriteString("algorithm", coreOptions.compareOptions.algorithmComparing.ToString());
-            w.WriteNumber("threshold", coreOptions.compareOptions.thresholdDifference);
+            w.WriteString("algorithm", compare.algorithmComparing.ToString());
+            w.WriteNumber("threshold", compare.thresholdDifference);
             w.WriteNumber("reducedImageSize", coreOptions.advancedOptions.reducedImageSize);
-            if (coreOptions.compareOptions.algorithmComparing == AntiDupl.NET.Core.Enums.AlgorithmComparing.Butteraugli)
-                w.WriteNumber("butteraugliSize", coreOptions.compareOptions.butteraugliSize);
+            if (compare.algorithmComparing == AntiDupl.NET.Core.Enums.AlgorithmComparing.Butteraugli)
+                w.WriteNumber("butteraugliSize", compare.butteraugliSize);
+            if (full)
+            {
+                w.WriteBoolean("checkOnEquality", compare.checkOnEquality);
+                w.WriteBoolean("transformedImage", compare.transformedImage);
+                w.WriteBoolean("sizeControl", compare.sizeControl);
+                w.WriteBoolean("typeControl", compare.typeControl);
+                w.WriteBoolean("ratioControl", compare.ratioControl);
+                w.WriteNumber("minimalImageSize", compare.minimalImageSize);
+                w.WriteNumber("maximalImageSize", compare.maximalImageSize);
+                w.WriteBoolean("compareInsideOneFolder", compare.compareInsideOneFolder);
+                w.WriteBoolean("compareInsideOneSearchPath", compare.compareInsideOneSearchPath);
+                w.WriteNumber("ignoreFrameWidth", coreOptions.advancedOptions.ignoreFrameWidth);
+                w.WriteBoolean("mistakeDataBase", coreOptions.advancedOptions.mistakeDataBase);
+                w.WriteBoolean("deleteToRecycleBin", coreOptions.advancedOptions.deleteToRecycleBin);
+            }
             w.WriteEndObject();
         }
 
@@ -233,18 +317,28 @@ namespace AntiDupl.NET.WinForms
 
         static private void Write(Action<Utf8JsonWriter> body)
         {
+            Write(new Action<Utf8JsonWriter>[] { body });
+        }
+
+        // One line per body, appended with a single write.
+        static private void Write(IEnumerable<Action<Utf8JsonWriter>> bodies)
+        {
             try
             {
                 using (MemoryStream stream = new MemoryStream())
                 {
-                    using (Utf8JsonWriter w = new Utf8JsonWriter(stream, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+                    foreach (Action<Utf8JsonWriter> body in bodies)
                     {
-                        w.WriteStartObject();
-                        w.WriteString("time", DateTime.Now.ToString("o"));
-                        body(w);
-                        w.WriteEndObject();
+                        using (Utf8JsonWriter w = new Utf8JsonWriter(stream, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+                        {
+                            w.WriteStartObject();
+                            w.WriteString("time", DateTime.Now.ToString("o"));
+                            w.WriteNumber("schema", SCHEMA);
+                            body(w);
+                            w.WriteEndObject();
+                        }
+                        stream.WriteByte((byte)'\n');
                     }
-                    stream.WriteByte((byte)'\n');
                     using (FileStream file = new FileStream(FilePath, FileMode.Append, FileAccess.Write, FileShare.Read))
                         stream.WriteTo(file);
                 }

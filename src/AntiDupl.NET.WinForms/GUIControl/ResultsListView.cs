@@ -308,6 +308,18 @@ namespace AntiDupl.NET.WinForms
             return results;
         }
 
+        // The pairs of the current result's group, which the group actions apply to.
+        private List<CoreResult> CurrentGroupResults()
+        {
+            List<CoreResult> results = new List<CoreResult>();
+            CoreResult current = GetCurrentResult();
+            if (current != null)
+                foreach (CoreResult result in m_results)
+                    if (result.group == current.group)
+                        results.Add(result);
+            return results;
+        }
+
         public void RefreshResults()
         {
             ProgressForm progressForm = new ProgressForm(ProgressForm.Type.RefreshResults, m_core, m_options, m_coreOptions, m_mainSplitContainer);
@@ -335,6 +347,8 @@ namespace AntiDupl.NET.WinForms
         /// <param name="directory"></param>
         public void MoveCurrentGroupToDirectory(string directory)
         {
+            DecisionLog.Action("MoveCurrentGroupToDirectory", "CurrentGroup", CurrentGroupResults(),
+                m_currentRowIndex, m_results.Length, m_coreOptions, directory);
             m_makeAction = true;
             ProgressForm progressForm = new ProgressForm(ProgressForm.Type.MoveCurrentGroup, directory, m_core, m_options, m_coreOptions, m_mainSplitContainer);
             progressForm.Execute();
@@ -343,6 +357,8 @@ namespace AntiDupl.NET.WinForms
 
         public void RenameCurrentGroupAs(string filename)
         {
+            DecisionLog.Action("RenameCurrentGroupAs", "CurrentGroup", CurrentGroupResults(),
+                m_currentRowIndex, m_results.Length, m_coreOptions, filename);
             m_makeAction = true;
             ProgressForm progressForm = new ProgressForm(ProgressForm.Type.RenameCurrentGroupAs, filename, m_core, m_options, m_coreOptions, m_mainSplitContainer);
             progressForm.Execute();

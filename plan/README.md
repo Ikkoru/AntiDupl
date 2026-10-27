@@ -62,4 +62,5 @@ Visual Studio or its Build Tools with the ".NET desktop" + "Desktop C++" workloa
 | [05-metadata-merge.md](05-metadata-merge.md) | delete-and-keep-metadata (AI metadata, ExifTool) |
 | [06-stretch-and-ameliorations.md](06-stretch-and-ameliorations.md) | QuantSmooth spec, other improvements |
 | [07-settings-study.md](07-settings-study.md) | which algorithm and setting finds which kind of copy (compression, resolution, crops …) without pairing up versions, and which file is the worse copy; measured on the user's images |
+| [decision-log.md](decision-log.md) | the personal build's decision log: file, events, fields, what each action means for a pair |
 | [tools/](tools/README.md) | reproduction scripts, experiment, Butteraugli harness, ExifTool config |
