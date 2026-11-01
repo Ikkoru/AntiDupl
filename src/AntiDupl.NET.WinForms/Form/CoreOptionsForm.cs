@@ -230,6 +230,8 @@ namespace AntiDupl.NET.WinForms
         private TabPage m_highlightTabPage;
         private CheckBox m_highlightDifferenceCheckBox;
         private LabeledNumericUpDown m_difrentValue;
+        private CheckBox m_ignoreCompressionNoiseCheckBox;
+        private LabeledNumericUpDown m_perceptualThresholdValue;
         private CheckBox m_notHighlightIfFragmentsMoreThemCheckBox;
         private LabeledIntegerEdit m_maxFragmentsForDisableHighlightLabeledIntegerEdit;
         private CheckBox m_highlightAllDifferencesCheckBox;
@@ -624,6 +626,28 @@ namespace AntiDupl.NET.WinForms
             m_penThicknessLabeledIntegerEdit.Value = m_options.resultsOptions.PenThickness;
             highlightTableLayoutPanel.Controls.Add(m_penThicknessLabeledIntegerEdit, 0, 10);
 
+            // One row for both, so the tab's rows fit without scrolling.
+            TableLayoutPanel perceptualTableLayoutPanel = InitFactory.Layout.Create(2, 1);
+            perceptualTableLayoutPanel.AutoSize = true;
+            perceptualTableLayoutPanel.Dock = DockStyle.None;
+            perceptualTableLayoutPanel.Margin = new Padding(0);
+            perceptualTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            perceptualTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            highlightTableLayoutPanel.Controls.Add(perceptualTableLayoutPanel, 0, 11);
+
+            m_ignoreCompressionNoiseCheckBox = InitFactory.CheckBox.Create(OnHighlightChanged);
+            m_ignoreCompressionNoiseCheckBox.Checked = m_options.resultsOptions.IgnoreCompressionNoise;
+            perceptualTableLayoutPanel.Controls.Add(m_ignoreCompressionNoiseCheckBox, 0, 0);
+
+            m_perceptualThresholdValue = new LabeledNumericUpDown(1, new decimal(0.5), new decimal(0.5),
+                new decimal(ResultsOptions.PERCEPTUAL_DIFFERENCE_THRESHOLD_DEFAULT), OnHighlightChanged);
+            m_perceptualThresholdValue.Min = 0.5F;
+            m_perceptualThresholdValue.Max = 50;
+            m_perceptualThresholdValue.Default = ResultsOptions.PERCEPTUAL_DIFFERENCE_THRESHOLD_DEFAULT;
+            // After the limits: setting them puts back the value the control held before.
+            m_perceptualThresholdValue.Value = m_options.resultsOptions.PerceptualDifferenceThreshold;
+            perceptualTableLayoutPanel.Controls.Add(m_perceptualThresholdValue, 1, 0);
+
             UpdateHighlightItemsEnabling();
         }
 
@@ -667,6 +691,8 @@ namespace AntiDupl.NET.WinForms
                 m_options.resultsOptions.AmountOfFragmentsOnY = m_amountOfFragmentsOnYLabeledIntegerEdit.Value;
                 m_options.resultsOptions.NormalizedSizeOfImage = m_normalizedSizeOfImageLabeledIntegerEdit.Value;
                 m_options.resultsOptions.PenThickness = m_penThicknessLabeledIntegerEdit.Value;
+                m_options.resultsOptions.IgnoreCompressionNoise = m_ignoreCompressionNoiseCheckBox.Checked;
+                m_options.resultsOptions.PerceptualDifferenceThreshold = m_perceptualThresholdValue.Value;
                 UpdateHighlightItemsEnabling();
                 m_options.resultsOptions.RaiseEventOnHighlightDifferenceChange();
             }
@@ -677,9 +703,11 @@ namespace AntiDupl.NET.WinForms
         /// </summary>
         private void UpdateHighlightItemsEnabling()
         {
+            m_ignoreCompressionNoiseCheckBox.Enabled = m_highlightDifferenceCheckBox.Checked;
+            m_perceptualThresholdValue.Enabled = m_highlightDifferenceCheckBox.Checked && m_ignoreCompressionNoiseCheckBox.Checked;
             if (m_highlightDifferenceCheckBox.Checked)
             {
-                m_difrentValue.Enabled = true;
+                m_difrentValue.Enabled = !m_ignoreCompressionNoiseCheckBox.Checked;
                 m_highlightAllDifferencesCheckBox.Enabled = true;
                 m_notHighlightIfFragmentsMoreThemCheckBox.Enabled = true;
                 m_maxFragmentsForDisableHighlightLabeledIntegerEdit.Enabled = m_notHighlightIfFragmentsMoreThemCheckBox.Checked;
@@ -905,6 +933,8 @@ namespace AntiDupl.NET.WinForms
             m_amountOfFragmentsOnYLabeledIntegerEdit.Text = s.CoreOptionsForm_AmountOfFragmentsOnYLabeledIntegerEdit_Text;
             m_normalizedSizeOfImageLabeledIntegerEdit.Text = s.CoreOptionsForm_NormalizedSizeOfImageLabeledIntegerEdit_Text;
             m_penThicknessLabeledIntegerEdit.Text = s.CoreOptionsForm_PenThicknessLabeledIntegerEdit_Text;
+            m_ignoreCompressionNoiseCheckBox.Text = s.CoreOptionsForm_IgnoreCompressionNoiseCheckBox_Text;
+            m_perceptualThresholdValue.Text = s.CoreOptionsForm_PerceptualThresholdValue_Text;
 
             m_imageDiffTabPage.Text = s.CoreOptionsForm_ImageDiffTabPage_Text;
             m_imageDiffExecutablePathLabeledStringEdit.Text = s.CoreOptionsForm_ImageDiffExecutablePathLabeledStringEdit_Text;

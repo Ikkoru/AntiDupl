@@ -58,6 +58,7 @@ typedef ad::TEngine* adEngineHandle;
 #include "adImageDataStorage.h"
 #include "adEngine.h"
 #include "adImageUtils.h"
+#include "adButteraugli.h"
 #include "adRecycleBin.h"
 #include "adExternal.h"
 #include "adDump.h"
@@ -660,5 +661,27 @@ DLLAPI adError adLoadBitmapLetterboxMetricsW(adEngineHandle handle, const adChar
     CHECK_HANDLE CHECK_POINTER(fileName)
 
     return ad::LoadBitmapLetterboxMetrics(fileName, maxW, maxH, pBitmap, handle->Options(), pNativeWidth, pNativeHeight, pBlurring, pBlockiness);
+}
+
+DLLAPI adError adDifferenceMap(adBitmapPtr pFirst, adBitmapPtr pSecond, adUInt32 width, adUInt32 height, float* pMap)
+{
+    CHECK_POINTER(pFirst) CHECK_POINTER(pSecond) CHECK_POINTER(pMap)
+    for (adBitmapPtr p : { pFirst, pSecond })
+        if (p->format != AD_PIXEL_FORMAT_ARGB32 || p->data == NULL || p->width == 0 || p->height == 0 ||
+            p->stride < (adInt32)(p->width * 4))
+            return AD_ERROR_INVALID_BITMAP;
+    if (width < 8 || height < 8)
+        return AD_ERROR_INVALID_BITMAP;
+    try
+    {
+        ad::TView first(pFirst->width, pFirst->height, pFirst->stride, ad::TView::Bgra32, pFirst->data);
+        ad::TView second(pSecond->width, pSecond->height, pSecond->stride, ad::TView::Bgra32, pSecond->data);
+        ad::DifferenceMap(first, second, width, height, pMap);
+        return AD_OK;
+    }
+    catch (...)
+    {
+        return AD_ERROR_UNKNOWN;
+    }
 }
 

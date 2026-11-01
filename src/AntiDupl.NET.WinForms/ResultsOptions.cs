@@ -33,7 +33,7 @@ namespace AntiDupl.NET.WinForms
 {
     /// <summary>
     /// Setting for table out (ListView).
-    /// Установки для таблицы вывода.
+    /// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ.
     /// </summary>
     public class ResultsOptions
     {
@@ -278,6 +278,20 @@ namespace AntiDupl.NET.WinForms
             }
         }
 
+        // The working size of the perceptual comparison, and its default
+        // threshold: the search's own default at that size (Butteraugli,
+        // CoreOptionsForm.THRESHOLD_DIFFERENCE_DEFAULT_BUTTERAUGLI), so a
+        // pair that scores as a copy marks nothing.
+        public const int PERCEPTUAL_DIFFERENCE_SIZE = 768;
+        public const float PERCEPTUAL_DIFFERENCE_THRESHOLD_DEFAULT = 8.5F;
+
+        // Marks the fragments where Butteraugli's difference map, which
+        // models how much compression noise the eye ignores, exceeds
+        // PerceptualDifferenceThreshold, instead of comparing grey levels.
+        public bool IgnoreCompressionNoise { get; set; } = false;
+
+        public float PerceptualDifferenceThreshold { get; set; } = PERCEPTUAL_DIFFERENCE_THRESHOLD_DEFAULT;
+
 
         private bool m_showNeighboursImages = false;
         public bool ShowNeighboursImages
@@ -363,6 +377,8 @@ namespace AntiDupl.NET.WinForms
             options.m_amountOfFragmentsOnY = m_amountOfFragmentsOnY;
             options.m_normalizedSizeOfImage = m_normalizedSizeOfImage;
             options.m_penThickness = m_penThickness;
+            options.IgnoreCompressionNoise = IgnoreCompressionNoise;
+            options.PerceptualDifferenceThreshold = PerceptualDifferenceThreshold;
         }
 
         public ResultsOptions()

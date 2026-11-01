@@ -623,6 +623,44 @@ namespace AntiDupl.NET.Core
             }
         }
 
+        /// <summary>
+        /// Butteraugli's difference map of two pictures given as B, G, R, A
+        /// bytes (stride = width * 4), both area-resized to width x height:
+        /// width * height values, row by row; null when the core lacks the
+        /// export or refuses the input. About 1 is a difference the eye just
+        /// sees; compression noise mostly stays far below.
+        /// </summary>
+        public float[] DifferenceMap(byte[] first, int firstWidth, int firstHeight,
+            byte[] second, int secondWidth, int secondHeight, int width, int height)
+        {
+            if (m_dll.adDifferenceMap == null)
+                return null;
+            float[] map = new float[width * height];
+            GCHandle hFirst = GCHandle.Alloc(first, GCHandleType.Pinned);
+            GCHandle hSecond = GCHandle.Alloc(second, GCHandleType.Pinned);
+            GCHandle hMap = GCHandle.Alloc(map, GCHandleType.Pinned);
+            CoreDll.adBitmap[] bitmaps = new CoreDll.adBitmap[2];
+            bitmaps[0] = new CoreDll.adBitmap { width = (uint)firstWidth, height = (uint)firstHeight, stride = firstWidth * 4,
+                format = CoreDll.PixelFormatType.Argb32, data = hFirst.AddrOfPinnedObject() };
+            bitmaps[1] = new CoreDll.adBitmap { width = (uint)secondWidth, height = (uint)secondHeight, stride = secondWidth * 4,
+                format = CoreDll.PixelFormatType.Argb32, data = hSecond.AddrOfPinnedObject() };
+            GCHandle hBitmaps = GCHandle.Alloc(bitmaps, GCHandleType.Pinned);
+            try
+            {
+                IntPtr p = hBitmaps.AddrOfPinnedObject();
+                Error error = m_dll.adDifferenceMap(p, p + Marshal.SizeOf<CoreDll.adBitmap>(), (uint)width, (uint)height,
+                    hMap.AddrOfPinnedObject());
+                return error == Error.Ok ? map : null;
+            }
+            finally
+            {
+                hBitmaps.Free();
+                hMap.Free();
+                hSecond.Free();
+                hFirst.Free();
+            }
+        }
+
         /// <summary>True if the core provides the adLoadBitmapLetterboxW export (aspect-preserving decode).</summary>
         public bool SupportsLoadBitmapLetterbox => m_dll.adLoadBitmapLetterboxW != null;
 

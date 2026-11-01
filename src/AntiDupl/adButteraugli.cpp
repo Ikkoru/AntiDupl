@@ -362,4 +362,24 @@ namespace ad
         }
         ::MoveFileEx(temporary.c_str(), m_path.c_str(), MOVEFILE_REPLACE_EXISTING);
     }
+    //-------------------------------------------------------------------------
+    void DifferenceMap(const TView & first, const TView & second, size_t width, size_t height, float * pMap)
+    {
+        const bool firstIsReference = first.width * first.height >= second.width * second.height;
+        const TView * pictures[2] = { firstIsReference ? &first : &second, firstIsReference ? &second : &first };
+        std::vector<butteraugli::ImageF> rgb[2];
+        for (int i = 0; i < 2; ++i)
+        {
+            TView resized(width, height, TView::Bgra32);
+            AreaResize(*pictures[i], resized);
+            TView bgr(width, height, TView::Bgr24);
+            SimdBgraToBgr(resized.data, width, height, resized.stride, bgr.data, bgr.stride);
+            rgb[i] = butteraugli::CreatePlanes<float>(width, height, 3);
+            ToLinear(bgr, rgb[i]);
+        }
+        butteraugli::ImageF diffmap;
+        butteraugli::ButteraugliDiffmap(rgb[0], rgb[1], 1.0, diffmap);
+        for (size_t y = 0; y < height; ++y)
+            memcpy(pMap + y * width, diffmap.Row(y), width * sizeof(float));
+    }
 }

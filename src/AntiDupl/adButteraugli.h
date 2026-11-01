@@ -97,5 +97,11 @@ namespace ad
         bool m_changed;
     };
     //-------------------------------------------------------------------------
+    // Butteraugli's difference map of two pictures (B, G, R, A bytes), both
+    // area-resized to width x height, the one with more pixels taken as the
+    // reference as in a search: one value per pixel, row by row, into pMap.
+    // For the preview's highlighting of the differences the eye sees.
+    void DifferenceMap(const TView & first, const TView & second, size_t width, size_t height, float * pMap);
+    //-------------------------------------------------------------------------
 }
 #endif//__adButteraugli_h__

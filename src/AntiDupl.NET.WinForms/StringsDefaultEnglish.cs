@@ -137,6 +137,8 @@ namespace AntiDupl.NET.WinForms
             s.CoreOptionsForm_AmountOfFragmentsOnYLabeledIntegerEdit_Text = "Amount of fragments on Y";
             s.CoreOptionsForm_NormalizedSizeOfImageLabeledIntegerEdit_Text = "Normalized size of image";
             s.CoreOptionsForm_PenThicknessLabeledIntegerEdit_Text = "Pen thickness";
+            s.CoreOptionsForm_IgnoreCompressionNoiseCheckBox_Text = "Ignore compression noise (slower), from";
+            s.CoreOptionsForm_PerceptualThresholdValue_Text = "";
 
             s.CoreOptionsForm_ImageDiffTabPage_Text = "Image Difftool";
             s.CoreOptionsForm_ImageDiffExecutablePathLabeledStringEdit_Text = "Executable path:";

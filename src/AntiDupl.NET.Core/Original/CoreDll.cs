@@ -644,6 +644,12 @@ namespace AntiDupl.NET.Core.Original
         [DynamicModuleApi]
         public adLoadBitmapW_fn adLoadBitmapW = null;
 
+        // Butteraugli's difference map of two ARGB32 pictures at width x height.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate Error adDifferenceMap_fn(IntPtr pFirst, IntPtr pSecond, uint width, uint height, IntPtr pMap);
+        [DynamicModuleApi]
+        public adDifferenceMap_fn adDifferenceMap = null;
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         public delegate Error adLoadBitmapLetterboxW_fn(IntPtr handle, string fileName, uint maxW, uint maxH, IntPtr pBitmap);
         [DynamicModuleApi]

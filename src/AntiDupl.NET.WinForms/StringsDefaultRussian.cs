@@ -137,6 +137,8 @@ namespace AntiDupl.NET.WinForms
             s.CoreOptionsForm_AmountOfFragmentsOnYLabeledIntegerEdit_Text = "Количество фрагментов по Y";
             s.CoreOptionsForm_NormalizedSizeOfImageLabeledIntegerEdit_Text = "Нормированный размер изображения";
             s.CoreOptionsForm_PenThicknessLabeledIntegerEdit_Text = "Толшина рамки выделения";
+            s.CoreOptionsForm_IgnoreCompressionNoiseCheckBox_Text = "Не учитывать шум сжатия (медленнее), от";
+            s.CoreOptionsForm_PerceptualThresholdValue_Text = "";
 
             s.CoreOptionsForm_ImageDiffTabPage_Text = "Разница изображений инструмент";
             s.CoreOptionsForm_ImageDiffExecutablePathLabeledStringEdit_Text = "Исполняемый путь:";

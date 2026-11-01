@@ -298,19 +298,40 @@ namespace AntiDupl.NET.WinForms
         private event HighlightCompleteDelegate HighlightCompleteEvent;
         private Thread _thread;
         private bool _highlightStop = false;
+        // Counts the pairs highlighted: a perceptual result is drawn only
+        // while its count is current, since Butteraugli can't be stopped
+        // midway and moving to the next pair doesn't wait for it.
+        private int m_highlightGeneration;
+        private bool m_threadPerceptual;
 
         private void SetDifference()
         {
+            m_highlightGeneration++;
             if (m_options.resultsOptions.HighlightDifference)
             {
                 if (_thread != null && _thread.ThreadState == System.Threading.ThreadState.Running)
                 {
                     HighlightCompleteEvent -= new HighlightCompleteDelegate(HighlightCompleteEventHandler);
                     _highlightStop = true;
-                    _thread.Join();
+                    if (!m_threadPerceptual)
+                        _thread.Join();
+                }
+                _highlightStop = false;
+                m_threadPerceptual = m_options.resultsOptions.IgnoreCompressionNoise;
+                if (m_threadPerceptual)
+                {
+                    int w1, h1, w2, h2;
+                    byte[] pixels1 = m_firstImagePreviewPanel.GetPixels(out w1, out h1);
+                    byte[] pixels2 = m_secondImagePreviewPanel.GetPixels(out w2, out h2);
+                    int generation = m_highlightGeneration;
+                    _thread = new Thread(
+                         unused => CalculatePerceptualDifferences(generation, pixels1, w1, h1, pixels2, w2, h2));
+                    _thread.Name = "Calculate rectangles of differences";
+                    _thread.IsBackground = true;
+                    _thread.Start();
+                    return;
                 }
                 HighlightCompleteEvent += new HighlightCompleteDelegate(HighlightCompleteEventHandler);
-                _highlightStop = false;
                 ComparableBitmap[] bitmap1 = m_firstImagePreviewPanel.GetImageFragments();
                 ComparableBitmap[] bitmap2 = m_secondImagePreviewPanel.GetImageFragments();
                 _thread = new Thread(
@@ -322,6 +343,66 @@ namespace AntiDupl.NET.WinForms
             {
                 m_firstImagePreviewPanel.ClearDifference();
                 m_secondImagePreviewPanel.ClearDifference();
+            }
+        }
+
+        // The fragments, on the same grid as GetImageFragments, where the
+        // largest value of Butteraugli's difference map exceeds the threshold;
+        // the rest as for the grey comparison (the limits on how many).
+        private void CalculatePerceptualDifferences(int generation, byte[] pixels1, int width1, int height1,
+            byte[] pixels2, int width2, int height2)
+        {
+            ResultsOptions options = m_options.resultsOptions;
+            int size = options.NormalizedSizeOfImage, columns = options.AmountOfFragmentsOnX, rows = options.AmountOfFragmentsOnY;
+            if (pixels1 == null || pixels2 == null || size <= 16 || columns <= 0 || rows <= 0)
+                return;
+            // The map keeps the first picture's shape; the grid stretches both to a square.
+            double scale = ResultsOptions.PERCEPTUAL_DIFFERENCE_SIZE / (double)Math.Max(width1, height1);
+            int mapWidth = Math.Max(8, (int)Math.Round(width1 * Math.Min(1.0, scale)));
+            int mapHeight = Math.Max(8, (int)Math.Round(height1 * Math.Min(1.0, scale)));
+            float[] map = m_core.DifferenceMap(pixels1, width1, height1, pixels2, width2, height2, mapWidth, mapHeight);
+            if (map == null)
+                return;
+
+            List<RectanglesWithSimilarity> rectangles = new List<RectanglesWithSimilarity>();
+            int fragmentWidth = size / columns, fragmentHeight = size / rows;
+            for (int row = 0; row < rows; row++)
+            {
+                for (int column = 0; column < columns; column++)
+                {
+                    int x0 = column * fragmentWidth * mapWidth / size, x1 = Math.Max(x0 + 1, (column + 1) * fragmentWidth * mapWidth / size);
+                    int y0 = row * fragmentHeight * mapHeight / size, y1 = Math.Max(y0 + 1, (row + 1) * fragmentHeight * mapHeight / size);
+                    float largest = 0;
+                    for (int y = y0; y < y1 && y < mapHeight; y++)
+                        for (int x = x0; x < x1 && x < mapWidth; x++)
+                            largest = Math.Max(largest, map[y * mapWidth + x]);
+                    if (largest > options.PerceptualDifferenceThreshold)
+                        rectangles.Add(new RectanglesWithSimilarity(
+                            new Rectangle(column * fragmentWidth, row * fragmentHeight, fragmentWidth, fragmentHeight), -largest));
+                }
+            }
+
+            if (options.NotHighlightIfFragmentsMoreThan && rectangles.Count > options.NotHighlightMaxFragments)
+                return;
+            rectangles.Sort((a, b) => a.similarity.CompareTo(b.similarity)); // the largest difference first
+            int count = options.HighlightAllDifferences ? rectangles.Count : Math.Min(rectangles.Count, options.MaxFragmentsForHighlight);
+            List<Rectangle> chosen = new List<Rectangle>();
+            for (int i = 0; i < count; i++)
+                chosen.Add(rectangles[i].rectangle);
+            if (chosen.Count == 0)
+                return;
+            try
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    if (generation != m_highlightGeneration)
+                        return;
+                    m_firstImagePreviewPanel.SetDifference(chosen);
+                    m_secondImagePreviewPanel.SetDifference(chosen);
+                }));
+            }
+            catch (InvalidOperationException) // the window is closing
+            {
             }
         }
 

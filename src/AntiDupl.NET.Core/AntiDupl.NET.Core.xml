@@ -56,6 +56,15 @@
             и ядро получит устаревший адрес (AV).
             </summary>
         </member>
+        <member name="M:AntiDupl.NET.Core.CoreLib.DifferenceMap(System.Byte[],System.Int32,System.Int32,System.Byte[],System.Int32,System.Int32,System.Int32,System.Int32)">
+            <summary>
+            Butteraugli's difference map of two pictures given as B, G, R, A
+            bytes (stride = width * 4), both area-resized to width x height:
+            width * height values, row by row; null when the core lacks the
+            export or refuses the input. About 1 is a difference the eye just
+            sees; compression noise mostly stays far below.
+            </summary>
+        </member>
         <member name="P:AntiDupl.NET.Core.CoreLib.SupportsLoadBitmapLetterbox">
             <summary>True if the core provides the adLoadBitmapLetterboxW export (aspect-preserving decode).</summary>
         </member>

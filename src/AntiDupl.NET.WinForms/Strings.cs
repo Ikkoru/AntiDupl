@@ -140,6 +140,8 @@ namespace AntiDupl.NET.WinForms
         public string CoreOptionsForm_AmountOfFragmentsOnYLabeledIntegerEdit_Text;
         public string CoreOptionsForm_NormalizedSizeOfImageLabeledIntegerEdit_Text;
         public string CoreOptionsForm_PenThicknessLabeledIntegerEdit_Text;
+        public string CoreOptionsForm_IgnoreCompressionNoiseCheckBox_Text;
+        public string CoreOptionsForm_PerceptualThresholdValue_Text;
 
         public string CoreOptionsForm_ImageDiffTabPage_Text;
         public string CoreOptionsForm_ImageDiffExecutablePathLabeledStringEdit_Text;

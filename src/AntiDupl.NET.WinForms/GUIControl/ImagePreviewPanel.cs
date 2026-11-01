@@ -554,6 +554,34 @@ namespace AntiDupl.NET.WinForms
             return null;
         }
 
+        /// <summary>
+        /// The shown picture's pixels as B, G, R, A bytes, a copy a background
+        /// thread may read while the panel moves on to another picture; null
+        /// when nothing is shown.
+        /// </summary>
+        public byte[] GetPixels(out int width, out int height)
+        {
+            width = height = 0;
+            Bitmap bitmap = m_pictureBoxPanel.Bitmap;
+            if (bitmap == null)
+                return null;
+            width = bitmap.Width;
+            height = bitmap.Height;
+            byte[] pixels = new byte[width * height * 4];
+            System.Drawing.Imaging.BitmapData data = bitmap.LockBits(new Rectangle(0, 0, width, height),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            try
+            {
+                for (int y = 0; y < height; y++)
+                    System.Runtime.InteropServices.Marshal.Copy(data.Scan0 + y * data.Stride, pixels, y * width * 4, width * 4);
+            }
+            finally
+            {
+                bitmap.UnlockBits(data);
+            }
+            return pixels;
+        }
+
         public void SetDifference(List<Rectangle> rectangles)
         {
             m_pictureBoxPanel.SetDifference(rectangles);

@@ -701,6 +701,12 @@ extern "C"
                                                  adUInt32* pNativeWidth, adUInt32* pNativeHeight,
                                                  double* pBlurring, double* pBlockiness);
 
+    // Butteraugli's difference map of two ARGB32 pictures, both area-resized
+    // to width x height (at least 8 x 8), the one with more pixels as the
+    // reference: width * height values, row by row, into pMap. About 1 means
+    // a difference the eye just sees; compression noise is mostly far below.
+    DLLAPI adError adDifferenceMap(adBitmapPtr pFirst, adBitmapPtr pSecond, adUInt32 width, adUInt32 height, float* pMap);
+
     /*------------Unicode/Ansi defines-------------------------------------------*/
 
 #ifdef UNICODE
