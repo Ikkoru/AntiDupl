@@ -5,7 +5,7 @@ The personal build records what happens to each result pair, so other programs c
 ## The file
 
 * `decisions.jsonl` in the program's settings folder: the `user\` folder next to the personal build's program, or the folder given with `-s`. Never in a searched folder, unless the settings folder is put inside one.
-* Append-only, UTF-8 without BOM, one JSON object per line, lines ending in LF. Paths are written verbatim (long paths, any Unicode; JSON escapes only what it must).
+* Append-only: never rotated, trimmed or rewritten, since other programs read past lines (`DecisionLog.Write` opens it only with `FileMode.Append`). UTF-8 without BOM, one JSON object per line, lines ending in LF. Paths are written verbatim (long paths, any Unicode; JSON escapes only what it must).
 * Writing never stops the program: a line that can't be written is lost. Each search's result lines are written by the search thread in one write, before the list appears.
 * Every line has `time` (local time with its offset, ISO 8601), `schema` and `event`. `schema` is 2 for the format below; lines without it are version 1, which had no `start`, `close` or `result` events, no `ignore`, `commandLineFolders` or full settings on `search`, and no group actions.
 
