@@ -387,9 +387,16 @@ namespace AntiDupl.NET.WinForms
             {
                 m_inner = inner;
                 if (inner is UpDownBase)
+                {
                     foreach (Control child in inner.Controls)
                         if (child is TextBoxBase)
                             m_textPart = new TextPartPlacer(child);
+                    // A borderless number box paints nothing of its own, so
+                    // the rows its one-line text part leaves bare kept
+                    // whatever was on the screen there before (stray bits of
+                    // text, where the layout moved things after a paint).
+                    inner.Paint += delegate (object sender, PaintEventArgs e) { e.Graphics.Clear(inner.BackColor); };
+                }
                 Margin = inner.Margin;
                 Dock = inner.Dock;
                 Anchor = inner.Anchor;
