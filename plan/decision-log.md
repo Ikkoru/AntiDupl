@@ -7,15 +7,15 @@ The personal build records what happens to each result pair, so other programs c
 * `decisions.jsonl` in the program's settings folder: the `user\` folder next to the personal build's program, or the folder given with `-s`. Never in a searched folder, unless the settings folder is put inside one.
 * Append-only: never rotated, trimmed or rewritten, since other programs read past lines (`DecisionLog.Write` opens it only with `FileMode.Append`). UTF-8 without BOM, one JSON object per line, lines ending in LF. Paths are written verbatim (long paths, any Unicode; JSON escapes only what it must).
 * Writing never stops the program: a line that can't be written is lost. Each search's result lines are written by the search thread in one write, before the list appears.
-* Every line has `time` (local time with its offset, ISO 8601), `schema` and `event`. `schema` is 2 for the format below; lines without it are version 1, which had no `start`, `close` or `result` events, no `ignore`, `commandLineFolders` or full settings on `search`, and no group actions.
+* Every line has `time` (local time with its offset, ISO 8601), `schema` and `event`. `schema` is 3 for the format below. Version 2 wrote a `result` line for every result, up to the core's limit of 100,000 a search, and no `resultLines`. Version 1 (lines without `schema`) had no `start`, `close` or `result` events, no `ignore`, `commandLineFolders` or full settings on `search`, and no group actions. In versions 1 and 2, and in version 3 before the build of 2026-11-03, an undo or redo by Ctrl+Z or Ctrl+Y in the results list wrote no `undo` or `redo` (only the menu did): `replay` counts such a key press on the list as one.
 
 ## Events
 
 | `event` | When | Fields |
 |---|---|---|
 | `start` | the program opens | `version` (the product version), `built` (the program file's time, UTC: tells personal builds of one version apart), `userFolder` |
-| `search` | a search ends (or is stopped) | `settings` (full, below), `folders` (searched, with subfolders), `ignore` (ignored folders), `commandLineFolders` (true when `-search` replaced the profile's folders), `images`, `pairs`, `defects`, `seconds` |
-| `result` | right after each `search`, one per result, in the list's first order | `row` (0-based), `group`, `groupSize` (AntiDupl's groups of connected pairs), and the pair (below) |
+| `search` | a search ends (or is stopped) | `settings` (full, below), `folders` (searched, with subfolders), `ignore` (ignored folders), `commandLineFolders` (true when `-search` replaced the profile's folders), `images`, `pairs`, `defects`, `seconds`, `resultLines` (how many `result` lines follow) |
+| `result` | right after each `search`, one per result in the list's first order, the first `DecisionLog.RESULT_LINES_MAX` (10,000) only | `row` (0-based), `group`, `groupSize` (AntiDupl's groups of connected pairs), and the pair (below) |
 | `view` | the user moves to a pair (repeats of the same pair are left out) | `row`, `rows`, the pair |
 | `action` | an action is about to be applied | `action`, `target` (`Current`, `Selected`, `CurrentGroup`), `detail` (where the action takes a name: the new path of a rename, the folder of a group move, the name of a group rename), `row`, `rows`, `settings` (short), `pairs` (a list of pairs) |
 | `undo`, `redo` | the user undoes or redoes the last action | none |
@@ -41,4 +41,4 @@ Results loaded when the program opens (the profile's results file) are those of 
 | `RenameFirst`, `RenameSecond` (`detail`: the new path), `RenameFirstLikeSecond`, `RenameSecondLikeFirst`, `RenameCurrentGroupAs` | linked: both kept as related pictures, one renamed after the other |
 | `MoveFirstToSecond`, `MoveSecondToFirst`, `MoveAndRenameFirstToSecond`, `MoveAndRenameSecondToFirst`, `MoveCurrentGroupToDirectory` | moved: both kept, one next to the other |
 
-A pair looked at (`view`) with no action is left: kept for now, the user moved on. An `undo` takes back the last action's decisions and a `redo` applies them again; a new action clears what can be redone.
+A pair looked at (`view`) with no action is left: kept for now, the user moved on. An `undo` takes back the last action's decisions and a `redo` applies them again; a new action clears what can be redone, and a new `search` or `start` leaves nothing to undo.

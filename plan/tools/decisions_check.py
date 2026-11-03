@@ -2,8 +2,10 @@
 written by the personal build's DecisionLog) and lists the decisions that go
 against the pairs' difference, for the settings study (plan 07).
 
-Usage: py -3 decisions_check.py <decisions.jsonl> [--top N] [--tsv out.tsv]
+Usage: py -3 decisions_check.py <decisions.jsonl> [--top N] [--tsv out.tsv] [--since DATE]
        py -3 decisions_check.py <decisions.jsonl> --keys [--since DATE]
+
+--since keeps the pairs first seen on or after that day (YYYY-MM-DD).
 
 Each pair gets its last decision, with undo and redo applied:
     deleted   a delete (first, second, both, a defect), a hint carried out
@@ -29,6 +31,7 @@ progress window opens, so an answered press is followed at once.
 """
 import argparse
 import datetime
+import itertools
 import json
 import sys
 
@@ -66,8 +69,46 @@ def decision(action, pair):
     return None
 
 
-def read_log(path):
-    return [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
+def read_log(path, results=False):
+    """The log's events, oldest first. The result lines a search writes
+    for every pair it found are most of the file's bytes and nothing here
+    needs them: they are skipped unless asked for, read as text first so
+    they are never parsed."""
+    events = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.strip() and (results or '"event":"result"' not in line):
+                events.append(json.loads(line))
+    return events
+
+
+def event_pairs(e):
+    """The pairs an event names: a view's own, an action's list; none for
+    the rest (a search's "pairs" is a count)."""
+    if e["event"] == "view":
+        return [e]
+    if e["event"] == "action":
+        return e.get("pairs", [])
+    return []
+
+
+def with_keyboard_undo(events):
+    """The events with an undo or redo for each Ctrl+Z or Ctrl+Y the
+    results list took, where the log has none: builds before
+    ResultsListView logged its own undo and redo wrote them only from the
+    menu. A press counts when it went to the list (or the split container,
+    which passes keys on to it), no progress window was open, and the next
+    event other than a view or key is no undo or redo of its own."""
+    out = []
+    for i, e in enumerate(events):
+        out.append(e)
+        if (e["event"] != "key" or e.get("hotKey") not in ("Undo", "Redo")
+                or e.get("to") not in ("ResultsListView", "MainSplitContainer") or e.get("progressWindowOpen")):
+            continue
+        after = next((f for f in itertools.islice(events, i + 1, None) if f["event"] not in ("view", "key")), None)
+        if after is None or after["event"] not in ("undo", "redo"):
+            out.append({"event": e["hotKey"].lower(), "time": e["time"], "fromKey": True})
+    return out
 
 
 def replay(events):
@@ -76,8 +117,12 @@ def replay(events):
     pairs = {}        # key -> pair info as last seen
     decided = {}      # key -> decision
     done, undone = [], []   # stacks of applied actions: [(key, previous decision)]
-    for e in events:
-        if e["event"] == "view":
+    for e in with_keyboard_undo(events):
+        if e["event"] in ("search", "start"):
+            # A new search, or the program opening, leaves nothing to undo.
+            done.clear()
+            undone.clear()
+        elif e["event"] == "view":
             k = key(e)
             pairs.setdefault(k, e)
             decided.setdefault(k, "left")
@@ -115,6 +160,7 @@ def event_time(e):
 def dropped_keys(events):
     """[(press, next event or None)] for the hot key presses that made no
     action, undo or redo."""
+    events = with_keyboard_undo(events)
     dropped = []
     for i, e in enumerate(events):
         if e["event"] != "key" or ("hotKey" in e and e["hotKey"] not in KEY_ACTIONS):
@@ -150,6 +196,12 @@ def main():
         report_keys(events, a.since)
         return 0
     pairs, decided = replay(events)
+    if a.since:
+        first_seen = {}
+        for e in events:
+            for p in event_pairs(e):
+                first_seen.setdefault(key(p), e["time"])
+        decided = {k: d for k, d in decided.items() if first_seen.get(k, "")[:10] >= a.since}
 
     counts = {}
     for d in decided.values():

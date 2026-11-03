@@ -116,6 +116,7 @@ namespace AntiDupl.NET.WinForms
             m_thresholdDifferenceComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             m_thresholdDifferenceComboBox.FlatStyle = FlatStyle.Popup;
             m_thresholdDifferenceComboBox.SelectedIndexChanged += new EventHandler(OnThresholdDifferenceChanged);
+            m_thresholdDifferenceComboBox.DropDownClosed += new EventHandler(OnListDropDownClosed);
             FillThresholds(m_coreOptions.compareOptions.algorithmComparing);
 
             m_algorithmComparingComboBox = new ToolStripComboBox();
@@ -124,6 +125,7 @@ namespace AntiDupl.NET.WinForms
             m_algorithmComparingComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             m_algorithmComparingComboBox.FlatStyle = FlatStyle.Popup;
             m_algorithmComparingComboBox.SelectedIndexChanged += new EventHandler(OnAlgorithmComparingChanged);
+            m_algorithmComparingComboBox.DropDownClosed += new EventHandler(OnListDropDownClosed);
             m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_SquaredSum);
             m_algorithmComparingComboBox.Items.Add("SSIM");
             m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_LocalColor);
@@ -286,6 +288,14 @@ namespace AntiDupl.NET.WinForms
                 m_deleteSecondButton.Image = Resources.Images.Get("DeleteSecondsHorizontalButton");
                 m_deleteBothButton.Image = Resources.Images.Get("DeleteBothesHorizontalButton");
             }
+        }
+
+        // Back to the results once a list closes: with the focus left in
+        // the list, the next hot keys went into it and did nothing, and a
+        // digit key there can pick a list entry starting with it.
+        private void OnListDropDownClosed(object sender, EventArgs e)
+        {
+            m_mainSplitContainer.resultsListView.Focus();
         }
 
         private void OnThresholdDifferenceChanged(object sender, EventArgs e)

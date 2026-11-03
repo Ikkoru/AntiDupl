@@ -48,7 +48,13 @@ namespace AntiDupl.NET.WinForms
     static public class DecisionLog
     {
         // Written on every line; lines without it are version 1.
-        public const int SCHEMA = 2;
+        public const int SCHEMA = 3;
+
+        // The result lines after a search: the first ones in the list's
+        // order. A search can find up to the core's result limit (100,000
+        // by default), at about 750 bytes a line; nobody reviews that many,
+        // and the log only grows.
+        public const int RESULT_LINES_MAX = 10000;
 
         static private string m_lastViewed;
 
@@ -144,10 +150,11 @@ namespace AntiDupl.NET.WinForms
         /// A finished (or stopped) search: its folders and settings, how many
         /// images it looked at, and what it found, so a search that found
         /// nothing leaves a trace too; then one line per result, in the order
-        /// the list shows them first.
+        /// the list shows them first, up to RESULT_LINES_MAX.
         /// </summary>
         static public void Search(CoreOptions coreOptions, CoreStatistic statistic, TimeSpan duration, CoreResult[] results)
         {
+            int resultLines = results == null ? 0 : Math.Min(results.Length, RESULT_LINES_MAX);
             Write(w =>
             {
                 w.WriteString("event", "search");
@@ -165,11 +172,12 @@ namespace AntiDupl.NET.WinForms
                 w.WriteNumber("pairs", statistic.duplImagePairNumber);
                 w.WriteNumber("defects", statistic.defectImageNumber);
                 w.WriteNumber("seconds", Math.Round(duration.TotalSeconds, 1));
+                w.WriteNumber("resultLines", resultLines);
             });
             if (results == null)
                 return;
             var lines = new List<Action<Utf8JsonWriter>>();
-            for (int i = 0; i < results.Length; i++)
+            for (int i = 0; i < resultLines; i++)
             {
                 int row = i;
                 CoreResult result = results[i];

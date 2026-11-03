@@ -171,7 +171,8 @@ namespace AntiDupl.NET.WinForms
             m_core.Clear(CoreDll.FileType.ImageDataBase);
             m_core.SortResult((CoreDll.SortType)m_options.resultsOptions.sortTypeDefault, m_options.resultsOptions.increasingDefault);
             CoreStatistic statistic = m_core.GetStatistic();
-            DecisionLog.Search(m_coreOptions, statistic, DateTime.Now - m_startDateTime, m_core.GetResult(0, m_core.GetResultSize()));
+            DecisionLog.Search(m_coreOptions, statistic, DateTime.Now - m_startDateTime,
+                m_core.GetResult(0, Math.Min(m_core.GetResultSize(), (uint)DecisionLog.RESULT_LINES_MAX)));
             m_state = State.Finish;
             LogPerformance(DateTime.Now - m_startDateTime, statistic);
         }

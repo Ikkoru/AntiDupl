@@ -14,8 +14,10 @@ WORK_DIR  a scratch folder: pairs\\<n>\\ gets the two images as <n>a and
 --since   only pairs first seen on or after this date (YYYY-MM-DD)
 --keep    a lasting folder for the run: pairs.tsv, scores.tsv, the report,
           and the copies of the pairs a later run can't copy again from the
-          archive (deleted ones, whose image leaves the Recycle Bin when it
-          is emptied) or that are worth keeping (linked ones)
+          archive (any pair with an image found in the Recycle Bin, which
+          it leaves when emptied: the deleted ones, and kept ones whose
+          image a later decision deleted) or that are worth keeping
+          (linked ones)
 
 An image is found by its logged size and modification time, at its own path,
 at the other image's path (a rename moves one onto the other), or in the
@@ -165,7 +167,7 @@ def main():
     events = dc.read_log(a.log)
     first_seen = {}
     for e in events:
-        for p in ([e] if e["event"] == "view" else e.get("pairs", [])):
+        for p in dc.event_pairs(e):
             if "second" in p:
                 first_seen.setdefault(dc.key(p), e["time"])
     pairs, decided = dc.replay(events)
@@ -255,7 +257,8 @@ def main():
             shutil.copy2(os.path.join(a.work, name), os.path.join(a.keep, name))
         for r in rows:
             src = os.path.join(pair_dir, str(r["n"]))
-            if r["decision"] in ("deleted", "linked") and os.path.isdir(src):
+            from_bin = "recycle bin" in r["from_a"] or "recycle bin" in r["from_b"]
+            if (from_bin or r["decision"] in ("deleted", "linked")) and os.path.isdir(src):
                 shutil.copytree(src, os.path.join(a.keep, "pairs", str(r["n"])), dirs_exist_ok=True)
     return 0
 

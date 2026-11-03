@@ -375,8 +375,11 @@ namespace AntiDupl.NET.WinForms
             if (keyEventArgs.KeyCode == Keys.ShiftKey || keyEventArgs.KeyCode == Keys.ControlKey || keyEventArgs.KeyCode == Keys.Menu)
                 return;
 
+            // Logged here as well as by the menu: the keys reach this list
+            // without going through the menu's handlers.
             if (hotKey == (Keys.Z | Keys.Control) && m_core.CanApply(CoreDll.ActionEnableType.Undo))
             {
+                DecisionLog.Event("undo");
                 ProgressForm progressForm = new ProgressForm(ProgressForm.Type.Undo, m_core, m_options, m_coreOptions, m_mainSplitContainer);
                 progressForm.Execute();
                 return;
@@ -384,6 +387,7 @@ namespace AntiDupl.NET.WinForms
 
             if (hotKey == (Keys.Y | Keys.Control) && m_core.CanApply(CoreDll.ActionEnableType.Redo))
             {
+                DecisionLog.Event("redo");
                 ProgressForm progressForm = new ProgressForm(ProgressForm.Type.Redo, m_core, m_options, m_coreOptions, m_mainSplitContainer);
                 progressForm.Execute();
                 return;
