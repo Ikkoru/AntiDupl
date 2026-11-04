@@ -49,6 +49,12 @@ namespace AntiDupl.NET.WinForms
         static private readonly Dictionary<int, double> THRESHOLD_DIFFERENCE_DEFAULT_BUTTERAUGLI =
             new Dictionary<int, double> { { 384, 5 }, { 512, 6 }, { 768, 8.5 }, { 1024, 9.5 } };
 
+        /// <summary>Whether an algorithm's differences are Butteraugli's scores.</summary>
+        static public bool IsButteraugli(AlgorithmComparing algorithm)
+        {
+            return algorithm == AlgorithmComparing.Butteraugli || algorithm == AlgorithmComparing.ButteraugliAligned;
+        }
+
         /// <summary>The highest threshold the lists offer for an algorithm.</summary>
         static public int ThresholdMax(AlgorithmComparing algorithm)
         {
@@ -56,7 +62,7 @@ namespace AntiDupl.NET.WinForms
                 return THRESHOLD_DIFFERENCE_MAX_SQUARED_SUM;
             if (algorithm == AlgorithmComparing.LocalColor)
                 return THRESHOLD_DIFFERENCE_MAX_LOCAL_COLOR;
-            if (algorithm == AlgorithmComparing.Butteraugli)
+            if (IsButteraugli(algorithm))
                 return THRESHOLD_DIFFERENCE_MAX_BUTTERAUGLI;
             return THRESHOLD_DIFFERENCE_MAX_SSIM;
         }
@@ -71,7 +77,7 @@ namespace AntiDupl.NET.WinForms
                 return THRESHOLD_DIFFERENCE_DEFAULT_SQUARED_SUM;
             if (algorithm == AlgorithmComparing.LocalColor)
                 return THRESHOLD_DIFFERENCE_DEFAULT_LOCAL_COLOR;
-            if (algorithm == AlgorithmComparing.Butteraugli)
+            if (IsButteraugli(algorithm))
             {
                 double threshold;
                 return THRESHOLD_DIFFERENCE_DEFAULT_BUTTERAUGLI.TryGetValue(butteraugliSize, out threshold) ? threshold :
@@ -86,7 +92,7 @@ namespace AntiDupl.NET.WinForms
         /// </summary>
         static public string ThresholdScale(AlgorithmComparing algorithm, int butteraugliSize)
         {
-            return algorithm == AlgorithmComparing.Butteraugli ? algorithm + " " + butteraugliSize : algorithm.ToString();
+            return IsButteraugli(algorithm) ? algorithm + " " + butteraugliSize : algorithm.ToString();
         }
 
         /// <summary>
@@ -107,7 +113,7 @@ namespace AntiDupl.NET.WinForms
         /// </summary>
         static public double[] ThresholdValues(AlgorithmComparing algorithm)
         {
-            if (algorithm != AlgorithmComparing.Butteraugli)
+            if (!IsButteraugli(algorithm))
                 return CoreCompareOptions.ThresholdSteps(ThresholdMax(algorithm));
             var steps = new List<double>();
             for (int i = 0; i <= 20; i++)
@@ -126,7 +132,7 @@ namespace AntiDupl.NET.WinForms
         /// </summary>
         static public void FillThresholds(ComboBox comboBox, AlgorithmComparing algorithm)
         {
-            string format = algorithm == AlgorithmComparing.Butteraugli ? "{0:0.##}" : "{0:0.##} %";
+            string format = IsButteraugli(algorithm) ? "{0:0.##}" : "{0:0.##} %";
             comboBox.Items.Clear();
             foreach (double value in ThresholdValues(algorithm))
                 comboBox.Items.Add(new LabeledComboBox.Value((int)Math.Round(value * 100), string.Format(format, value)));
@@ -359,6 +365,7 @@ namespace AntiDupl.NET.WinForms
             m_algorithmComparingLabeledComboBox.comboBox.Items.Add(new LabeledComboBox.Value(1, "SSIM"));
             m_algorithmComparingLabeledComboBox.comboBox.Items.Add(new LabeledComboBox.Value((int)AlgorithmComparing.LocalColor, Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_LocalColor));
             m_algorithmComparingLabeledComboBox.comboBox.Items.Add(new LabeledComboBox.Value((int)AlgorithmComparing.Butteraugli, Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_Butteraugli));
+            m_algorithmComparingLabeledComboBox.comboBox.Items.Add(new LabeledComboBox.Value((int)AlgorithmComparing.ButteraugliAligned, Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_ButteraugliAligned));
             checkTableLayoutPanel.Controls.Add(m_algorithmComparingLabeledComboBox, 0, 6);
 
             m_thresholdDifferenceLabeledComboBox = new LabeledComboBox(COMBO_BOX_WIDTH, COMBO_BOX_HEIGHT, OnOptionChanged);
@@ -968,7 +975,7 @@ namespace AntiDupl.NET.WinForms
               !m_newCoreOptions.compareOptions.sizeControl;
             m_thresholdDifferenceLabeledComboBox.Enabled = m_newCoreOptions.compareOptions.checkOnEquality;
             m_butteraugliSizeLabeledComboBox.Enabled = m_newCoreOptions.compareOptions.checkOnEquality &&
-              m_newCoreOptions.compareOptions.algorithmComparing == AlgorithmComparing.Butteraugli;
+              IsButteraugli(m_newCoreOptions.compareOptions.algorithmComparing);
             m_compareInsideOneFolderCheckBox.Enabled = m_newCoreOptions.compareOptions.checkOnEquality;
             m_compareInsideOneSearchPathCheckBox.Enabled = m_newCoreOptions.compareOptions.checkOnEquality;
 
@@ -999,7 +1006,7 @@ namespace AntiDupl.NET.WinForms
             AlgorithmComparing algorithm = (AlgorithmComparing)m_algorithmComparingLabeledComboBox.SelectedValue;
             int butteraugliSize = m_butteraugliSizeLabeledComboBox.SelectedValue;
             if (algorithm != m_thresholdAlgorithm ||
-                (algorithm == AlgorithmComparing.Butteraugli && butteraugliSize != m_thresholdButteraugliSize))
+                (IsButteraugli(algorithm) && butteraugliSize != m_thresholdButteraugliSize))
             {
                 double threshold = SwitchThreshold(m_options, ThresholdScale(m_thresholdAlgorithm, m_thresholdButteraugliSize),
                     m_newCoreOptions.compareOptions.thresholdDifference, algorithm, butteraugliSize);

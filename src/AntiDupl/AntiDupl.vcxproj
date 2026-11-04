@@ -93,6 +93,7 @@
     </BuildLog>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="adAlign.cpp" />
     <ClCompile Include="adAvif.cpp" />
     <ClCompile Include="3rd\butteraugli\butteraugli\butteraugli.cc">
       <CompileAs>CompileAsCpp</CompileAs>
@@ -149,6 +150,7 @@
     <ClCompile Include="AntiDupl.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="adAlign.h" />
     <ClInclude Include="adAvif.h" />
     <ClInclude Include="3rd\butteraugli\butteraugli\butteraugli.h" />
     <ClInclude Include="adBlurringDetector.h" />
