@@ -661,6 +661,51 @@ namespace AntiDupl.NET.Core
             }
         }
 
+        /// <summary>
+        /// The same for two pictures framed differently: laid over each other
+        /// at the sizes given, each gets its own map, 0 where the other doesn't
+        /// show the picture. False when they don't align, or a plain resize
+        /// lays them over each other as well: DifferenceMap is the one then.
+        /// </summary>
+        public bool AlignedDifferenceMaps(byte[] first, int firstWidth, int firstHeight, byte[] second, int secondWidth, int secondHeight,
+            int firstMapWidth, int firstMapHeight, int secondMapWidth, int secondMapHeight, out float[] firstMap, out float[] secondMap)
+        {
+            firstMap = secondMap = null;
+            if (m_dll.adAlignedDifferenceMaps == null)
+                return false;
+            float[] map1 = new float[firstMapWidth * firstMapHeight], map2 = new float[secondMapWidth * secondMapHeight];
+            GCHandle hFirst = GCHandle.Alloc(first, GCHandleType.Pinned);
+            GCHandle hSecond = GCHandle.Alloc(second, GCHandleType.Pinned);
+            GCHandle hMap1 = GCHandle.Alloc(map1, GCHandleType.Pinned);
+            GCHandle hMap2 = GCHandle.Alloc(map2, GCHandleType.Pinned);
+            CoreDll.adBitmap[] bitmaps = new CoreDll.adBitmap[2];
+            bitmaps[0] = new CoreDll.adBitmap { width = (uint)firstWidth, height = (uint)firstHeight, stride = firstWidth * 4,
+                format = CoreDll.PixelFormatType.Argb32, data = hFirst.AddrOfPinnedObject() };
+            bitmaps[1] = new CoreDll.adBitmap { width = (uint)secondWidth, height = (uint)secondHeight, stride = secondWidth * 4,
+                format = CoreDll.PixelFormatType.Argb32, data = hSecond.AddrOfPinnedObject() };
+            GCHandle hBitmaps = GCHandle.Alloc(bitmaps, GCHandleType.Pinned);
+            try
+            {
+                IntPtr p = hBitmaps.AddrOfPinnedObject();
+                int aligned;
+                Error error = m_dll.adAlignedDifferenceMaps(p, p + Marshal.SizeOf<CoreDll.adBitmap>(), (uint)firstMapWidth, (uint)firstMapHeight,
+                    hMap1.AddrOfPinnedObject(), (uint)secondMapWidth, (uint)secondMapHeight, hMap2.AddrOfPinnedObject(), out aligned);
+                if (error != Error.Ok || aligned == 0)
+                    return false;
+                firstMap = map1;
+                secondMap = map2;
+                return true;
+            }
+            finally
+            {
+                hBitmaps.Free();
+                hMap2.Free();
+                hMap1.Free();
+                hSecond.Free();
+                hFirst.Free();
+            }
+        }
+
         /// <summary>True if the core provides the adLoadBitmapLetterboxW export (aspect-preserving decode).</summary>
         public bool SupportsLoadBitmapLetterbox => m_dll.adLoadBitmapLetterboxW != null;
 

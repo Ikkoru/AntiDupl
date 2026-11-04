@@ -2,9 +2,10 @@
 
 Usage:
     python core_search.py DLL_DIR USER_DIR SEARCH_DIR [--size N] [--threshold N]
-                          [--turbo 0|1] [--algorithm 0|1|3|4] [--runs N] [--use-db]
+                          [--turbo 0|1] [--algorithm 0|1|3|4|5] [--runs N] [--use-db]
                           [--details] [--collect-threads N] [--transformed]
                           [--images FILE] [--butteraugli-size N] [--frame N]
+                          [--any-ratio]
 
 DLL_DIR     folder holding AntiDupl.dll (e.g. bin\\Release of a build)
 USER_DIR    the engine's user folder (settings, image database); created if
@@ -16,10 +17,11 @@ SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
 --threshold threshold difference in % (default 1); fractions only with builds
             that take them (a double in the compare options)
 --turbo     use libjpeg-turbo (default 1)
---algorithm 0 = mean square, 1 = SSIM (default 1), 3 = local colour (T11;
-            builds with it only), 4 = Butteraugli (T12; builds with it only;
-            the threshold is in Butteraugli's units, and the scores are kept
-            in USER_DIR\\butteraugli.adp for the next run)
+--algorithm 0 = mean square, 1 = SSIM (default 1), 3 = local colour (builds
+            with it only), 4 = Butteraugli (builds with it only; the threshold
+            is in Butteraugli's units, and the scores are kept in
+            USER_DIR\\butteraugli.adp for the next run), 5 = Butteraugli with
+            alignment (the same)
 --runs      repeat the search N times in one engine (float-noise checks)
 --use-db    like the GUI's "use database of image": load the image database
             from USER_DIR\\images\\<size>x<size> before each search and save it
@@ -35,6 +37,8 @@ SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
 --butteraugli-size N  longest side of the images Butteraugli compares
             (builds with T12 only; the build's default otherwise)
 --frame N   Ignore frame width in % (AntiDupl's 0 to 12; default 0)
+--any-ratio leaves the core's default "same aspect ratio only" filter off, as
+            the user's settings do; crops and new canvases need it
 
 Prints one line per pair: difference with full precision, the 2-decimal value
 the UI shows, and the two file names; for a pair found as a rotated or mirrored
@@ -148,6 +152,7 @@ def main():
     ap.add_argument("--images")
     ap.add_argument("--butteraugli-size", type=int)
     ap.add_argument("--frame", type=int, default=0)
+    ap.add_argument("--any-ratio", action="store_true")
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -191,6 +196,8 @@ def main():
         cmp_.compareInsideOneFolder = 1
         cmp_.checkOnEquality = 1
         cmp_.transformedImage = 1 if a.transformed else 0
+        if a.any_ratio:
+            cmp_.ratioControl = 0
         if a.butteraugli_size is not None:
             size = ctypes.c_int32.from_buffer(cmp_buf, BUTTERAUGLI_SIZE_OFFSET)
             if not isinstance(cmp_, CompareOptionsDouble) or size.value not in BUTTERAUGLI_SIZES:

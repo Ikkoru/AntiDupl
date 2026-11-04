@@ -4,7 +4,7 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
 
 ## P0 — Bugs
 
-- [ ] **T26 A hot key is sometimes ignored** (user's report: delete or mistake, now and then, seemingly at random; not yet proven). Two candidates in the code. (1) Each action runs through `ProgressForm.Execute`, which after 200 ms opens a modal progress window whose `OnKeyDown` marks every key handled, so a key pressed while it is open is lost; it closes on a 100 ms timer, and the list updates only after that. (2) Hot keys act only when the results list has the focus: `MainSplitContainer` passes them on only when it has the focus itself, and a key sent to the tool bar's lists or the preview does nothing. T17's key events (`to`, `window`, `progressWindowOpen`) tell which: after the user reports a miss, `plan/tools/decisions_check.py --keys` lists the presses with no action after them.
+None open.
 
 ## P1 — Requested features
 
@@ -22,6 +22,11 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
 - [ ] **T19 Crop search in two stages** (design from the study, [07](plan/07-settings-study.md) § Crops; proposal before code). Every metric that compares whole pictures ranks crops among the versions, so crops need: (1) candidates from a crop-tolerant descriptor per image (SSCD-like embedding: no unrelated pair let through in the set; a colour histogram is free but will mistake more pictures in a large collection), (2) ORB keypoints per image (3 ms, about 38 kB) to align each candidate pair (about 1 ms), (3) local colour on the overlap to tell a crop of a copy from a crop of a version. Upstream's deep search (#254, merged; the WPF front end only, `AntiDupl.NET.Deep` and `AntiDupl.NET.Onnx`) has (1) and (2) in another form: DINOv2-base embeddings through ONNX Runtime, clustering, and a SuperPoint + LightGlue check; it reports the embedding similarity, so copies and versions come mixed. Proposal for (3) on top of it: the workspace's `reference\github-drafts\issue-crop-search.md` (after the T10/T11 one). Open: the Windows Forms front end has no deep search.
 - [ ] **T28b Tune the perceptual highlight after the real runs** (T28 is done; the user expects to adjust it once their real runs are complete): the threshold (8.5, the search's default at 768 px), the working size, the spread of one fragment around an edit that Butteraugli's filters cause, and whether shifted near-copies (the lips pair) need alignment first (T19).
 - [ ] **T29 Sort rules** (user's request): keep chosen orders whatever column is clicked, for example the earlier date in the file name always on the left. Two separate things: which image of a pair goes on the left (today: the lesser path, or the sorted image after a sort by a *1:*/*2:* column, T6 and `TResult::OrientFor`), and the order of rows after the clicked column (today fixed: the other image's same property, then the paths). The user's choice: two settings, a left-image rule (as now, or a fixed list of keys such as file name, then modification date, then path) and a list of tie-break keys after the clicked column. No date parsing: the file name in natural order (`TPath::NaturalCompare`, T6) already puts the dated names in date order, and which name is on which side is easy to see.
+- [ ] **T30 Selectable image details** (user's request): the text in the panel below the image in horizontal mode (file name, format, resolution and so on) can be selected and copied.
+- [ ] **T31 Several folders in *Add folder*** (user's request): selecting multiple folders adds each as its own search path.
+- [ ] **T32 Images aligned towards each other** (user's request): an option to align the left image centre-right and the right image centre-left.
+- [ ] **T33 Status bar info on the preview's bar** (user's request): an option to show what is normally on the status bar on the bar with the *Open both images* button.
+- [ ] **T34 *Highlight* button** (user's request): turns the highlighting on and off, to the left of the *Help* button.
 
 ## P2 — Stretch goals (noted; not to be done unless asked)
 
@@ -33,6 +38,7 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
 - [ ] **S4 Other ameliorations** found while reading the code (HEIF-with-alpha bug, JPEG-quality and bits-per-pixel columns, hint policy for identical pairs, EXIF orientation, crop-tolerant alignment, colour-aware difference highlighting, explicit identity flags, `/utf-8` for the C++ sources, v145 miscompiling libde265, EXIF UserComment cut to one character) → [06 § S4](plan/06-stretch-and-ameliorations.md)
 - [ ] **S5 Mistakes list:** verify *Remember mistakes* works as a search filter; clearer labels for it and for *Check the database of mistakes at loading*; a quick toggle; never discard entries on an offline drive; crash-safe saving of all core files; path + content identity (lost entries kept and re-linked when found again) with a compact image/pair storage or SQLite. → [06 § S5](plan/06-stretch-and-ameliorations.md)
 - [ ] **S6 column for both images of each pair estimating their real, practical quality:** Accounting for jpegQuantSmooth and other genuine quality restoring methods that could be applied to them.
+- [ ] **S7 Animated images are compared by their first frame only**, so GIFs that start on a black frame pair up with each other whatever they show (two pairs the user kept in the Tumblr run, Butteraugli 0.0001 and 10.2). Compare a middle frame, or several.
 
 ## Notes for the implementing session
 

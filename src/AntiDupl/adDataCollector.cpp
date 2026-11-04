@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "adPerformance.h"
+#include "adButteraugli.h"
 #include "adEngine.h"
 #include "adImageData.h"
 #include "adOptions.h"
@@ -222,9 +223,20 @@ namespace ad
         }
     }
 
+    static void ToGray(const TView & view, TView & gray)
+    {
+        if (view.format == TView::Format::Rgb24)
+            Simd::RgbToGray(view, gray);
+        else if (view.format == TView::Format::Rgba32)
+            Simd::RgbaToGray(view, gray);
+        else
+            Simd::BgraToGray(view, gray);
+    }
+
     TDataCollector::TDataCollector(TEngine *pEngine)
         :m_pOptions(pEngine->Options()),
-        m_pResult(pEngine->Result())
+        m_pResult(pEngine->Result()),
+        m_pKeypointStore(pEngine->ButteraugliStore() && pEngine->ButteraugliStore()->NeedsKeypoints() ? pEngine->ButteraugliStore() : NULL)
     {
         for(int size = INITIAL_REDUCED_IMAGE_SIZE; size > m_pOptions->advanced.reducedImageSize; size >>= 1)
 			m_pGrayBuffers.push_back(new TView(size, size, size, TView::Gray8, NULL));
@@ -244,6 +256,8 @@ namespace ad
             SetCrc32c(pImageData);
         if(pImageData->PixelDataFillingNeed(m_pOptions))
             FillPixelData(pImageData);
+        else if(m_pKeypointStore)
+            FillKeypoints(pImageData);
         if(pImageData->DefectCheckingNeed(m_pOptions))
             CheckOnDefect(pImageData);
 		TDefectType defect = pImageData->GetDefect(m_pOptions);
@@ -265,18 +279,9 @@ namespace ad
             pImageData->type = (TImageType)pImage->Format();
 
 			TView gray(pImage->View()->width, pImage->View()->height, TView::Gray8, NULL);
-            if (pImage->View()->format == TView::Format::Rgb24)
-            {
-                Simd::RgbToGray(*pImage->View(), gray);
-            }
-            else if (pImage->View()->format == TView::Format::Rgba32)
-            {
-                Simd::RgbaToGray(*pImage->View(), gray);
-            }
-            else
-            {
-                Simd::BgraToGray(*pImage->View(), gray);
-            }
+            ToGray(*pImage->View(), gray);
+            if(m_pKeypointStore)
+                m_pKeypointStore->SetKeypoints(pImageData, gray);
 
 			pImageData->blockiness = GetBlockiness(gray);
 
@@ -302,6 +307,19 @@ namespace ad
             pImageData->height = 0; 
             pImageData->width = 0;
             pImageData->type = AD_IMAGE_NONE;
+        }
+    }
+
+    void TDataCollector::FillKeypoints(TImageData* pImageData)
+    {
+        AD_FUNCTION_PERFORMANCE_TEST
+        TImage *pImage = TImage::Load(pImageData->hGlobal, m_pOptions);
+        if(pImage)
+        {
+            TView gray(pImage->View()->width, pImage->View()->height, TView::Gray8, NULL);
+            ToGray(*pImage->View(), gray);
+            m_pKeypointStore->SetKeypoints(pImageData, gray);
+            delete pImage;
         }
     }
 

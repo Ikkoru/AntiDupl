@@ -263,7 +263,7 @@ namespace AntiDupl.NET.WinForms
             w.WriteString("algorithm", compare.algorithmComparing.ToString());
             w.WriteNumber("threshold", compare.thresholdDifference);
             w.WriteNumber("reducedImageSize", coreOptions.advancedOptions.reducedImageSize);
-            if (compare.algorithmComparing == AntiDupl.NET.Core.Enums.AlgorithmComparing.Butteraugli)
+            if (CoreOptionsForm.IsButteraugli(compare.algorithmComparing))
                 w.WriteNumber("butteraugliSize", compare.butteraugliSize);
             if (full)
             {

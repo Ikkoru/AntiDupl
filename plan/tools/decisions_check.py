@@ -23,7 +23,7 @@ and the kept pairs (mistake, left) with the lowest, the ones to ask the user
 about; and with --tsv every pair with its decision.
 
 --keys lists instead the presses of a hot key that should have made an
-action, undo or redo (T26) where the log's next event other than a view is
+action, undo or redo where the log's next event other than a view is
 something else or comes over KEY_ANSWER_SECONDS later: the key, where it went
 (the control and window), whether a progress window was open, and what came
 next. The action is logged as soon as the hot key is handled, before its

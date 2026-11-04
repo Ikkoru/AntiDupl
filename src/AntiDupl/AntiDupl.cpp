@@ -685,3 +685,29 @@ DLLAPI adError adDifferenceMap(adBitmapPtr pFirst, adBitmapPtr pSecond, adUInt32
     }
 }
 
+DLLAPI adError adAlignedDifferenceMaps(adBitmapPtr pFirst, adBitmapPtr pSecond,
+                                       adUInt32 firstWidth, adUInt32 firstHeight, float* pFirstMap,
+                                       adUInt32 secondWidth, adUInt32 secondHeight, float* pSecondMap,
+                                       adBool* pAligned)
+{
+    CHECK_POINTER(pFirst) CHECK_POINTER(pSecond) CHECK_POINTER(pFirstMap) CHECK_POINTER(pSecondMap) CHECK_POINTER(pAligned)
+    for (adBitmapPtr p : { pFirst, pSecond })
+        if (p->format != AD_PIXEL_FORMAT_ARGB32 || p->data == NULL || p->width == 0 || p->height == 0 ||
+            p->stride < (adInt32)(p->width * 4))
+            return AD_ERROR_INVALID_BITMAP;
+    if (firstWidth < 8 || firstHeight < 8 || secondWidth < 8 || secondHeight < 8)
+        return AD_ERROR_INVALID_BITMAP;
+    try
+    {
+        ad::TView first(pFirst->width, pFirst->height, pFirst->stride, ad::TView::Bgra32, pFirst->data);
+        ad::TView second(pSecond->width, pSecond->height, pSecond->stride, ad::TView::Bgra32, pSecond->data);
+        *pAligned = ad::AlignedDifferenceMaps(first, second, firstWidth, firstHeight, pFirstMap,
+            secondWidth, secondHeight, pSecondMap) ? TRUE : FALSE;
+        return AD_OK;
+    }
+    catch (...)
+    {
+        return AD_ERROR_UNKNOWN;
+    }
+}
+

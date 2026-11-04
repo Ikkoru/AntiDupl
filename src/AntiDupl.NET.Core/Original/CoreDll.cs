@@ -650,6 +650,13 @@ namespace AntiDupl.NET.Core.Original
         [DynamicModuleApi]
         public adDifferenceMap_fn adDifferenceMap = null;
 
+        // The same for two pictures framed differently, each with its own map.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate Error adAlignedDifferenceMaps_fn(IntPtr pFirst, IntPtr pSecond, uint firstWidth, uint firstHeight, IntPtr pFirstMap,
+            uint secondWidth, uint secondHeight, IntPtr pSecondMap, out int aligned);
+        [DynamicModuleApi]
+        public adAlignedDifferenceMaps_fn adAlignedDifferenceMaps = null;
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         public delegate Error adLoadBitmapLetterboxW_fn(IntPtr handle, string fileName, uint maxW, uint maxH, IntPtr pBitmap);
         [DynamicModuleApi]

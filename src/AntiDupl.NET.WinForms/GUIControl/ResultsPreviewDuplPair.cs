@@ -346,24 +346,21 @@ namespace AntiDupl.NET.WinForms
             }
         }
 
+        // A picture's difference map keeps its shape; the grid stretches it to a square.
+        private static Size DifferenceMapSize(int width, int height)
+        {
+            double scale = Math.Min(1.0, ResultsOptions.PERCEPTUAL_DIFFERENCE_SIZE / (double)Math.Max(width, height));
+            return new Size(Math.Max(8, (int)Math.Round(width * scale)), Math.Max(8, (int)Math.Round(height * scale)));
+        }
+
         // The fragments, on the same grid as GetImageFragments, where the
-        // largest value of Butteraugli's difference map exceeds the threshold;
-        // the rest as for the grey comparison (the limits on how many).
-        private void CalculatePerceptualDifferences(int generation, byte[] pixels1, int width1, int height1,
-            byte[] pixels2, int width2, int height2)
+        // map's largest value exceeds the threshold; the rest as for the grey
+        // comparison (the limits on how many). Empty when there are too many.
+        private List<Rectangle> MarkedFragments(float[] map, Size mapSize)
         {
             ResultsOptions options = m_options.resultsOptions;
             int size = options.NormalizedSizeOfImage, columns = options.AmountOfFragmentsOnX, rows = options.AmountOfFragmentsOnY;
-            if (pixels1 == null || pixels2 == null || size <= 16 || columns <= 0 || rows <= 0)
-                return;
-            // The map keeps the first picture's shape; the grid stretches both to a square.
-            double scale = ResultsOptions.PERCEPTUAL_DIFFERENCE_SIZE / (double)Math.Max(width1, height1);
-            int mapWidth = Math.Max(8, (int)Math.Round(width1 * Math.Min(1.0, scale)));
-            int mapHeight = Math.Max(8, (int)Math.Round(height1 * Math.Min(1.0, scale)));
-            float[] map = m_core.DifferenceMap(pixels1, width1, height1, pixels2, width2, height2, mapWidth, mapHeight);
-            if (map == null)
-                return;
-
+            int mapWidth = mapSize.Width, mapHeight = mapSize.Height;
             List<RectanglesWithSimilarity> rectangles = new List<RectanglesWithSimilarity>();
             int fragmentWidth = size / columns, fragmentHeight = size / rows;
             for (int row = 0; row < rows; row++)
@@ -382,14 +379,44 @@ namespace AntiDupl.NET.WinForms
                 }
             }
 
+            List<Rectangle> chosen = new List<Rectangle>();
             if (options.NotHighlightIfFragmentsMoreThan && rectangles.Count > options.NotHighlightMaxFragments)
-                return;
+                return chosen;
             rectangles.Sort((a, b) => a.similarity.CompareTo(b.similarity)); // the largest difference first
             int count = options.HighlightAllDifferences ? rectangles.Count : Math.Min(rectangles.Count, options.MaxFragmentsForHighlight);
-            List<Rectangle> chosen = new List<Rectangle>();
             for (int i = 0; i < count; i++)
                 chosen.Add(rectangles[i].rectangle);
-            if (chosen.Count == 0)
+            return chosen;
+        }
+
+        // Laid over each other first, so that a shift or a crop isn't taken
+        // for a difference: then a fragment of one is not the same fragment of
+        // the other, and each picture gets its own. A pair that doesn't align,
+        // or needs no aligning, gets one map for both.
+        private void CalculatePerceptualDifferences(int generation, byte[] pixels1, int width1, int height1,
+            byte[] pixels2, int width2, int height2)
+        {
+            ResultsOptions options = m_options.resultsOptions;
+            if (pixels1 == null || pixels2 == null || options.NormalizedSizeOfImage <= 16 ||
+                options.AmountOfFragmentsOnX <= 0 || options.AmountOfFragmentsOnY <= 0)
+                return;
+            Size size1 = DifferenceMapSize(width1, height1), size2 = DifferenceMapSize(width2, height2);
+            List<Rectangle> chosen1, chosen2;
+            float[] map1, map2;
+            if (m_core.AlignedDifferenceMaps(pixels1, width1, height1, pixels2, width2, height2,
+                size1.Width, size1.Height, size2.Width, size2.Height, out map1, out map2))
+            {
+                chosen1 = MarkedFragments(map1, size1);
+                chosen2 = MarkedFragments(map2, size2);
+            }
+            else
+            {
+                map1 = m_core.DifferenceMap(pixels1, width1, height1, pixels2, width2, height2, size1.Width, size1.Height);
+                if (map1 == null)
+                    return;
+                chosen1 = chosen2 = MarkedFragments(map1, size1);
+            }
+            if (chosen1.Count == 0 && chosen2.Count == 0)
                 return;
             try
             {
@@ -397,8 +424,8 @@ namespace AntiDupl.NET.WinForms
                 {
                     if (generation != m_highlightGeneration)
                         return;
-                    m_firstImagePreviewPanel.SetDifference(chosen);
-                    m_secondImagePreviewPanel.SetDifference(chosen);
+                    m_firstImagePreviewPanel.SetDifference(chosen1);
+                    m_secondImagePreviewPanel.SetDifference(chosen2);
                 }));
             }
             catch (InvalidOperationException) // the window is closing

@@ -65,6 +65,14 @@
             sees; compression noise mostly stays far below.
             </summary>
         </member>
+        <member name="M:AntiDupl.NET.Core.CoreLib.AlignedDifferenceMaps(System.Byte[],System.Int32,System.Int32,System.Byte[],System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Single[]@,System.Single[]@)">
+            <summary>
+            The same for two pictures framed differently: laid over each other
+            at the sizes given, each gets its own map, 0 where the other doesn't
+            show the picture. False when they don't align, or a plain resize
+            lays them over each other as well: DifferenceMap is the one then.
+            </summary>
+        </member>
         <member name="P:AntiDupl.NET.Core.CoreLib.SupportsLoadBitmapLetterbox">
             <summary>True if the core provides the adLoadBitmapLetterboxW export (aspect-preserving decode).</summary>
         </member>
@@ -104,6 +112,9 @@
         </member>
         <member name="F:AntiDupl.NET.Core.Enums.AlgorithmComparing.Butteraugli">
             <summary>Butteraugli's score on the pairs local colour finds within 10 % (core: AD_COMPARING_BUTTERAUGLI).</summary>
+        </member>
+        <member name="F:AntiDupl.NET.Core.Enums.AlgorithmComparing.ButteraugliAligned">
+            <summary>The same, and what a keypoint index finds, scored on the overlap once aligned: crops, new canvases, shifted or rescaled copies (core: AD_COMPARING_BUTTERAUGLI_ALIGNED).</summary>
         </member>
     </members>
 </doc>

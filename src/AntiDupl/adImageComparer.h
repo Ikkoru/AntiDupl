@@ -52,6 +52,7 @@ namespace ad
         Sets m_sets;
 
         TOptions *m_pOptions;
+        TResultStorage *m_pResult;
     public:
         TImageComparer(TEngine *pEngine);
         virtual ~TImageComparer();
@@ -72,7 +73,6 @@ namespace ad
         static double PixelDifference(TImageDataPtr pFirst, TImageDataPtr pSecond, double metric);
 
     private:
-        TResultStorage *m_pResult;
         TImageData *m_pTransformedImageData;
         TUInt8* m_pBuffer;
         TUInt8* m_pMask;
@@ -168,6 +168,9 @@ namespace ad
         virtual void Compare(TImageDataPtr pOriginal, TImageDataPtr pTransformed, adTransformType transform);
         virtual bool IsDuplPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference);
 
+        // Whether the options' filters let the pair through.
+        bool Comparable(TImageDataPtr pFirst, TImageDataPtr pSecond) const;
+
         // The pair's local colour difference in percent, or a negative value
         // when the options' filters leave it out or it is over the threshold.
         double LocalColorDifference(TImageDataPtr pFirst, TImageDataPtr pSecond) const;
@@ -196,12 +199,42 @@ namespace ad
         virtual void Compare(TImageDataPtr pOriginal, TImageDataPtr pTransformed, adTransformType transform);
         virtual bool IsDuplPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference);
 
-    private:
+        // The pair's score as IsDuplPair judges it: negative when local
+        // colour leaves it out or a file can't be decoded.
+        double PlainScore(TImageDataPtr pFirst, TImageDataPtr pSecond, TImageDataPtr pOriginal, adTransformType transform);
+
         TButteraugliStore *m_pStore;
+
+    private:
         // The image being compared and its turn: IsDuplPair gets the turned
         // copy of the reduced images, the store the image itself.
         TImageDataPtr m_pOriginal;
         adTransformType m_transform;
+    };
+    //-------------------------------------------------------------------------
+    // Butteraugli as above, and besides the pairs local colour finds, those
+    // that show the same picture framed differently, the case where every
+    // comparison point by point fails: a crop, a wider canvas, a copy shifted
+    // or slightly rescaled. The keypoint index picks the candidates and
+    // Butteraugli scores what the two have in common, laid over each other
+    // (TButteraugliStore::AlignedScore). Not for turned or mirrored images,
+    // whose keypoints don't match; their reduced images still pair them as
+    // in Butteraugli's search.
+    class TImageComparer_ButteraugliAligned : public TImageComparer_Butteraugli
+    {
+    public:
+        TImageComparer_ButteraugliAligned(TEngine *pEngine);
+
+    protected:
+        // Called once per image, by the thread that owns it, where Compare
+        // runs on every thread for its share of the images: the index holds
+        // all of them, so this is where an image meets its candidates.
+        virtual void Add(TImageDataPtr pImageData);
+
+    private:
+        bool IsAlignedPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference);
+
+        std::vector<TImageDataPtr> m_candidates;
     };
     //-------------------------------------------------------------------------
     TImageComparer* CreateImageComparer(TEngine *pEngine);

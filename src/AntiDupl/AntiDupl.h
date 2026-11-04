@@ -390,6 +390,7 @@ extern "C"
 		// .NET side runs itself; the core compares it as SSIM.
 		AD_COMPARING_LOCAL_COLOR = 3,
 		AD_COMPARING_BUTTERAUGLI = 4,
+		AD_COMPARING_BUTTERAUGLI_ALIGNED = 5,
 		AD_COMPARING_SIZE
 	};
 
@@ -706,6 +707,16 @@ extern "C"
     // reference: width * height values, row by row, into pMap. About 1 means
     // a difference the eye just sees; compression noise is mostly far below.
     DLLAPI adError adDifferenceMap(adBitmapPtr pFirst, adBitmapPtr pSecond, adUInt32 width, adUInt32 height, float* pMap);
+
+    // The same for two pictures framed differently, laid over each other
+    // first: each gets its own map at the size given, 0 where the other
+    // doesn't show the picture. *pAligned is false, and the maps untouched,
+    // when they don't align or simply resizing lays them over each other
+    // just as well: adDifferenceMap is the one for those.
+    DLLAPI adError adAlignedDifferenceMaps(adBitmapPtr pFirst, adBitmapPtr pSecond,
+                                           adUInt32 firstWidth, adUInt32 firstHeight, float* pFirstMap,
+                                           adUInt32 secondWidth, adUInt32 secondHeight, float* pSecondMap,
+                                           adBool* pAligned);
 
     /*------------Unicode/Ansi defines-------------------------------------------*/
 
