@@ -92,8 +92,8 @@ function Send-AdClick($element, $window) {
 }
 
 # Opens Search > Options through the tool bar's Options button (its sixth
-# button) and returns the dialog.
-function Open-AdOptions($p, $main, [int]$TimeoutSeconds = 30) {
+# button) and returns the dialog, whose title depends on the language.
+function Open-AdOptions($p, $main, [int]$TimeoutSeconds = 30, [string]$Title = 'Options') {
     $toolbar = $main.FindFirst($TS::Children, (New-AdCondition $AE::ControlTypeProperty $CT::ToolBar))
     $button = @($toolbar.FindAll($TS::Children, (New-AdCondition $AE::ControlTypeProperty $CT::Button)))[5]
     Send-AdClick $button $toolbar
@@ -103,7 +103,7 @@ function Open-AdOptions($p, $main, [int]$TimeoutSeconds = 30) {
         Start-Sleep -Seconds 1
         try {
             # The dialog is a window inside the main window in UI Automation's tree.
-            $dialog = @($main.FindAll($TS::Children, $isWindow)) | Where-Object { $_.Current.Name -eq 'Options' } | Select-Object -First 1
+            $dialog = @($main.FindAll($TS::Children, $isWindow)) | Where-Object { $_.Current.Name -eq $Title } | Select-Object -First 1
             if ($dialog) { return $dialog }
         } catch {}
     }
