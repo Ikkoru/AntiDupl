@@ -64,6 +64,7 @@ namespace ad
     static const double REFINE_CORRELATION_MIN = 0.7;
     static const size_t REFINE_PATCHES_MIN = 8;
     static const double REFINE_OUTLIER_MIN = 0.25; // pixels
+    static const double REFINE_REACH = 3.0; // times the radius searched
 
     //-------------------------------------------------------------------------
     TAffine TAffine::After(const TAffine & o) const
@@ -865,6 +866,19 @@ namespace ad
         return true;
     }
 
+    // Whether a correction moves the picture's corners about as far as the
+    // patches could have seen: patches all in one corner fit the others badly.
+    static bool WithinReach(const TAffine & t, size_t width, size_t height, int radius)
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            const double x = (i & 1) ? double(width) : 0, y = (i & 2) ? double(height) : 0;
+            if (hypot(t.a * x + t.b * y + t.c - x, t.d * x + t.e * y + t.f - y) > REFINE_REACH * radius)
+                return false;
+        }
+        return true;
+    }
+
     void RefineTransform(const uint8_t * fixed, size_t fixedWidth, size_t fixedHeight, ptrdiff_t fixedStride,
         const uint8_t * moving, size_t movingWidth, size_t movingHeight, ptrdiff_t movingStride, TAffine & transform)
     {
@@ -889,7 +903,8 @@ namespace ad
                 }
             }
             TAffine correction;
-            if (patches.size() < REFINE_PATCHES_MIN || !FitShifts(patches, correction))
+            if (patches.size() < REFINE_PATCHES_MIN || !FitShifts(patches, correction) ||
+                !WithinReach(correction, fixedWidth, fixedHeight, radius))
                 return;
             transform = transform.After(correction);
         }

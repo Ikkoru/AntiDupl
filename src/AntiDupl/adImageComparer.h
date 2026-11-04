@@ -199,13 +199,11 @@ namespace ad
         virtual void Compare(TImageDataPtr pOriginal, TImageDataPtr pTransformed, adTransformType transform);
         virtual bool IsDuplPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference);
 
-        // The pair's score as IsDuplPair judges it: negative when local
-        // colour leaves it out or a file can't be decoded.
-        double PlainScore(TImageDataPtr pFirst, TImageDataPtr pSecond, TImageDataPtr pOriginal, adTransformType transform);
+        // The score of a pair local colour lets through, for the image being
+        // compared in its turn; negative when a file can't be decoded.
+        virtual double Score(TImageDataPtr pSecond);
 
         TButteraugliStore *m_pStore;
-
-    private:
         // The image being compared and its turn: IsDuplPair gets the turned
         // copy of the reduced images, the store the image itself.
         TImageDataPtr m_pOriginal;
@@ -217,9 +215,11 @@ namespace ad
     // comparison point by point fails: a crop, a wider canvas, a copy shifted
     // or slightly rescaled. The keypoint index picks the candidates and
     // Butteraugli scores what the two have in common, laid over each other
-    // (TButteraugliStore::AlignedScore). Not for turned or mirrored images,
-    // whose keypoints don't match; their reduced images still pair them as
-    // in Butteraugli's search.
+    // (TButteraugliStore::AlignedScore). Of the pairs local colour lets
+    // through, the ones that score badly get the same second look, so a
+    // pair's difference doesn't depend on which way it was found. Not for
+    // turned or mirrored images, whose keypoints don't match; their reduced
+    // images still pair them as in Butteraugli's search.
     class TImageComparer_ButteraugliAligned : public TImageComparer_Butteraugli
     {
     public:
@@ -230,6 +230,7 @@ namespace ad
         // runs on every thread for its share of the images: the index holds
         // all of them, so this is where an image meets its candidates.
         virtual void Add(TImageDataPtr pImageData);
+        virtual double Score(TImageDataPtr pSecond);
 
     private:
         bool IsAlignedPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference);

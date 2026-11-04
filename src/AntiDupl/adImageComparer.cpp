@@ -538,20 +538,23 @@ namespace ad
         TImageComparer_LocalColor::Compare(pOriginal, pTransformed, transform);
     }
 
-    double TImageComparer_Butteraugli::PlainScore(TImageDataPtr pFirst, TImageDataPtr pSecond, TImageDataPtr pOriginal, adTransformType transform)
+    double TImageComparer_Butteraugli::Score(TImageDataPtr pSecond)
     {
-        if(LocalColorDifference(pFirst, pSecond) < 0)
-            return -1;
-        // Pixel-identical images need no score; PixelDifference gives them 0.
-        const double score = PixelDifference(pFirst, pSecond, 1);
-        return score > 0 ? m_pStore->Score(pOriginal, pSecond, transform) : 0;
+        return m_pStore->Score(m_pOriginal, pSecond, m_transform);
     }
 
     bool TImageComparer_Butteraugli::IsDuplPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference)
     {
-        const double score = PlainScore(pFirst, pSecond, m_pOriginal, m_transform);
-        if(score < 0)
+        if(LocalColorDifference(pFirst, pSecond) < 0)
             return false;
+        // Pixel-identical images need no score; PixelDifference gives them 0.
+        double score = PixelDifference(pFirst, pSecond, 1);
+        if(score > 0)
+        {
+            score = Score(pSecond);
+            if(score < 0)
+                return false;
+        }
         double difference = PixelDifference(pFirst, pSecond, score);
         if(difference > m_pOptions->compare.thresholdDifference)
             return false;
@@ -581,14 +584,20 @@ namespace ad
         }
     }
 
+    double TImageComparer_ButteraugliAligned::Score(TImageDataPtr pSecond)
+    {
+        const double score = TImageComparer_Butteraugli::Score(pSecond);
+        if(score < ALIGN_PLAIN_SCORE_MIN || m_transform != AD_TRANSFORM_TURN_0)
+            return score;
+        const double aligned = m_pStore->AlignedScore(m_pOriginal, pSecond);
+        return aligned >= 0 ? std::min(score, aligned) : score;
+    }
+
     bool TImageComparer_ButteraugliAligned::IsAlignedPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference)
     {
-        if(!Comparable(pFirst, pSecond))
-            return false;
-        // Compare, on whichever thread owns the other image, reports what
-        // the plain score pairs.
-        const double plain = PlainScore(pFirst, pSecond, pFirst, AD_TRANSFORM_TURN_0);
-        if(plain >= 0 && PixelDifference(pFirst, pSecond, plain) <= m_pOptions->compare.thresholdDifference)
+        // Compare, on whichever thread owns the other image, judges the
+        // pairs local colour lets through.
+        if(!Comparable(pFirst, pSecond) || LocalColorDifference(pFirst, pSecond) >= 0)
             return false;
 
         const double score = m_pStore->AlignedScore(pFirst, pSecond);

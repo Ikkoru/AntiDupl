@@ -103,7 +103,6 @@ namespace ad
         void Decode(TImageDataPtr pImageData, TWorkImage & image) const;
         double Compute(const TView & first, const TView & second, adTransformType transform) const;
         double ComputeAligned(const TView & first, const TView & second, const TAffine & transform) const;
-        double FindAlignedScore(TImageDataPtr pFirst, TImageDataPtr pSecond);
         std::shared_ptr<const TKeypoints> Keypoints(TImageDataPtr pImageData);
         void Load();
         void Save() const;

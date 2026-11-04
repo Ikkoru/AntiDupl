@@ -244,6 +244,15 @@ namespace ad
         m_indexed.push_back(pImageData);
     }
 
+    // From pixels of a picture of one size to those of another: pixel
+    // centres correspond, not pixel corners.
+    static TAffine Rescale(size_t fromWidth, size_t fromHeight, size_t toWidth, size_t toHeight)
+    {
+        const double sx = double(toWidth) / fromWidth, sy = double(toHeight) / fromHeight;
+        TAffine t = { sx, 0, 0.5 * sx - 0.5, 0, sy, 0.5 * sy - 0.5 };
+        return t;
+    }
+
     double TButteraugliStore::AlignedScore(TImageDataPtr pFirst, TImageDataPtr pSecond)
     {
         if (Before(pSecond, pFirst))
@@ -260,7 +269,22 @@ namespace ad
                 return it->second;
         }
 
-        const double score = FindAlignedScore(pFirst, pSecond);
+        // Most candidates end here, and matching them again costs less than
+        // keeping them all in the scores' file.
+        const std::shared_ptr<const TKeypoints> firstKeypoints = Keypoints(pFirst), secondKeypoints = Keypoints(pSecond);
+        TAffine transform;
+        if (!firstKeypoints || !secondKeypoints || !FindTransform(*secondKeypoints, *firstKeypoints, transform, NULL))
+            return -1;
+        const TKeypoints & a = *firstKeypoints, & b = *secondKeypoints;
+        if (!EnoughOverlap(a, b, transform))
+            return -1;
+
+        TWorkImagePtr first = Image(pFirst), second = Image(pSecond);
+        if (!first->bgr || !second->bgr)
+            return -1;
+        const double score = ComputeAligned(*first->bgr, *second->bgr,
+            Rescale(a.width, a.height, first->bgr->width, first->bgr->height).After(transform).After(
+                Rescale(second->bgr->width, second->bgr->height, b.width, b.height)));
 
         if (keyed)
         {
@@ -269,34 +293,6 @@ namespace ad
             m_changed = true;
         }
         return score;
-    }
-
-    // From pixels of a picture of one size to those of another: pixel
-    // centres correspond, not pixel corners.
-    static TAffine Rescale(size_t fromWidth, size_t fromHeight, size_t toWidth, size_t toHeight)
-    {
-        const double sx = double(toWidth) / fromWidth, sy = double(toHeight) / fromHeight;
-        TAffine t = { sx, 0, 0.5 * sx - 0.5, 0, sy, 0.5 * sy - 0.5 };
-        return t;
-    }
-
-    double TButteraugliStore::FindAlignedScore(TImageDataPtr pFirst, TImageDataPtr pSecond)
-    {
-        const std::shared_ptr<const TKeypoints> firstKeypoints = Keypoints(pFirst), secondKeypoints = Keypoints(pSecond);
-        TAffine transform;
-        if (!firstKeypoints || !secondKeypoints || !FindTransform(*secondKeypoints, *firstKeypoints, transform, NULL))
-            return -1;
-
-        const TKeypoints & a = *firstKeypoints, & b = *secondKeypoints;
-        if (!EnoughOverlap(a, b, transform)) // before decoding anything
-            return -1;
-
-        TWorkImagePtr first = Image(pFirst), second = Image(pSecond);
-        if (!first->bgr || !second->bgr)
-            return -1;
-        return ComputeAligned(*first->bgr, *second->bgr,
-            Rescale(a.width, a.height, first->bgr->width, first->bgr->height).After(transform).After(
-                Rescale(second->bgr->width, second->bgr->height, b.width, b.height)));
     }
 
     TButteraugliStore::TWorkImagePtr TButteraugliStore::Image(TImageDataPtr pImageData)
