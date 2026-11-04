@@ -42,12 +42,16 @@ namespace AntiDupl.NET.WinForms
         static public int THRESHOLD_DIFFERENCE_MAX_LOCAL_COLOR = 50;
         static public int THRESHOLD_DIFFERENCE_DEFAULT_LOCAL_COLOR = 4;
         // In Butteraugli's own units, not percent, and they grow with the
-        // working size: a default per size, between the settings study's
-        // largest score of a compressed or resized copy and the closest
-        // version (plan 02, mode 4).
+        // working size: a default per size, between the largest score of a
+        // compressed or resized copy and the closest version in test pictures.
         static public int THRESHOLD_DIFFERENCE_MAX_BUTTERAUGLI = 50;
         static private readonly Dictionary<int, double> THRESHOLD_DIFFERENCE_DEFAULT_BUTTERAUGLI =
             new Dictionary<int, double> { { 384, 5 }, { 512, 6 }, { 768, 8.5 }, { 1024, 9.5 } };
+        // The second threshold worth using, shown beside the list: it adds the
+        // copies the default misses, and some versions. Above it, on pairs
+        // judged by hand, versions outnumber copies.
+        static private readonly Dictionary<int, double> THRESHOLD_DIFFERENCE_WIDE_BUTTERAUGLI =
+            new Dictionary<int, double> { { 384, 12 }, { 512, 14 }, { 768, 15 }, { 1024, 16 } };
 
         /// <summary>The highest threshold the lists offer for an algorithm.</summary>
         static public int ThresholdMax(AlgorithmComparing algorithm)
@@ -180,6 +184,7 @@ namespace AntiDupl.NET.WinForms
         private CheckBox m_ratioControlCheckBox;
         private LabeledComboBox m_algorithmComparingLabeledComboBox;
         private LabeledComboBox m_thresholdDifferenceLabeledComboBox;
+        private Label m_thresholdHintLabel;
         private LabeledComboBox m_butteraugliSizeLabeledComboBox;
         private LabeledIntegerEdit m_minimalImageSizeLabeledIntegerEdit;
         private LabeledIntegerEdit m_maximalImageSizeLabeledIntegerEdit;
@@ -365,6 +370,10 @@ namespace AntiDupl.NET.WinForms
             m_thresholdAlgorithm = m_newCoreOptions.compareOptions.algorithmComparing;
             m_thresholdButteraugliSize = m_newCoreOptions.compareOptions.butteraugliSize;
             FillThresholds(m_thresholdDifferenceLabeledComboBox.comboBox, m_thresholdAlgorithm);
+            m_thresholdHintLabel = InitFactory.Label.Create();
+            m_thresholdHintLabel.Padding = new Padding(0, 5, 0, 5);
+            m_thresholdDifferenceLabeledComboBox.ColumnCount = 3;
+            m_thresholdDifferenceLabeledComboBox.Controls.Add(m_thresholdHintLabel, 2, 0);
             checkTableLayoutPanel.Controls.Add(m_thresholdDifferenceLabeledComboBox, 0, 7);
 
             m_butteraugliSizeLabeledComboBox = new LabeledComboBox(COMBO_BOX_WIDTH, COMBO_BOX_HEIGHT, OnOptionChanged);
@@ -1005,6 +1014,10 @@ namespace AntiDupl.NET.WinForms
                     m_newCoreOptions.compareOptions.thresholdDifference, algorithm, butteraugliSize);
                 ShowThresholds(algorithm, butteraugliSize, threshold);
             }
+
+            m_thresholdHintLabel.Visible = algorithm == AlgorithmComparing.Butteraugli;
+            m_thresholdHintLabel.Text = string.Format(Resources.Strings.Current.CoreOptionsForm_ThresholdHintLabel_Text,
+                ThresholdDefault(AlgorithmComparing.Butteraugli, butteraugliSize), THRESHOLD_DIFFERENCE_WIDE_BUTTERAUGLI[butteraugliSize]);
         }
 
         // The threshold list for an algorithm and working size, showing the threshold.
