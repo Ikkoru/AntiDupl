@@ -1022,7 +1022,7 @@ namespace AntiDupl.NET.WinForms
                 ShowThresholds(algorithm, butteraugliSize, threshold);
             }
 
-            m_thresholdHintLabel.Visible = algorithm == AlgorithmComparing.Butteraugli;
+            m_thresholdHintLabel.Visible = IsButteraugli(algorithm);
             m_thresholdHintLabel.Text = string.Format(Resources.Strings.Current.CoreOptionsForm_ThresholdHintLabel_Text,
                 ThresholdDefault(AlgorithmComparing.Butteraugli, butteraugliSize), THRESHOLD_DIFFERENCE_WIDE_BUTTERAUGLI[butteraugliSize]);
         }
