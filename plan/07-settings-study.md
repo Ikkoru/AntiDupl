@@ -176,7 +176,49 @@ Keypoints on 512 px copies (SIFT with scikit-image; ORB and AKAZE with OpenCV), 
 * The version pairs judged crops are one illustration's middle steps against its final and copies (with ORB also 8 pairs of another illustration's steps): those steps are on a canvas 3 % taller and 1 % wider than the final's, and the final shows 96 % of it. The geometry is right.
 * ORB and AKAZE judge crops as well as SIFT and are 25–100 times faster to extract here (scikit-image's SIFT is slow; OpenCV's would be closer). As the aligned comparison, SIFT keeps more crops ahead of the versions (11 versions first, ORB 81, AKAZE 128).
 
-Matching every pair of a large collection is too slow even at 1 ms, so a crop search needs candidates first, and the global metrics can't give them (they rank crops among the versions). What only has to separate crops from **unrelated** pictures does: SSCD, SigLIP and colour histograms put every crop ahead of every unrelated pair, DINOv2 all but 3 of 912 (crops and versions alike pass, and the aligned comparison then tells them apart). The unrelated pairs here are only 912, between four illustrations by one artist; a real collection holds far more, which histograms with their 512 numbers per image will mistake more often than an embedding trained for copies. [06 § S4](06-stretch-and-ameliorations.md) A5 has the idea; this is its design: an SSCD-like embedding or histogram per image to pick candidates, ORB keypoints per image to align them, local colour on the overlap to judge.
+Matching every pair of a large collection is too slow even at 1 ms, so a crop search needs candidates first, and the global metrics can't give them (they rank crops among the versions). What only has to separate crops from **unrelated** pictures does: SSCD, SigLIP and colour histograms put every crop ahead of every unrelated pair, DINOv2 all but 3 of 912 (crops and versions alike pass, and the aligned comparison then tells them apart). The unrelated pairs here are only 912, between four illustrations by one artist; a real collection holds far more, which histograms with their 512 numbers per image will mistake more often than an embedding trained for copies. [06 § S4](06-stretch-and-ameliorations.md) A5 has the idea.
+
+### The aligned search as built
+
+Built as [02, mode 5](02-comparison-modes.md#mode-5--aligned-perceptual-crops-shifts-t19-on-the-personal-branch) with keypoints for all three steps: an index of the keypoints instead of an embedding finds the candidates, so nothing needs a model, and Butteraugli on the overlap instead of local colour judges them. Measured on the Tumblr run's saved pairs (3,903 pairs, 7,768 images, all the user's decisions: `Research\real-runs\tumblr\` in the workspace) and on this set.
+
+**Keypoints.** On the real pairs, upright BRIEF aligned more than oriented ORB on the same corners (1,835 pairs against 1,749), even at one fixed scale. The core's own version (`adAlign.cpp`: FAST, Harris, a pyramid, upright BRIEF, no new library) puts the same pairs under 8.5 and 15 as OpenCV's ORB in every group of decisions, at 12–17 ms per image on a 512 × 384 copy and 0.3–0.5 ms per pair; 500 keypoints take 20 kB, and 300 find the same pairs here.
+
+**The fit must be exact.** Keypoints leave an error of about a pixel, and Butteraugli scores that like an edit. Butteraugli at 768 px on four pairs of the user's:
+
+| Pair | Plain | Keypoints only | Refined by patches |
+|---|---|---|---|
+| a copy already in line | 1.37 | 28.75 | 1.37 |
+| upscale, scale 1.016 | 56.91 | 4.88 | 2.79 |
+| upscale, scale 1.28 | 81.05 | 12.09 | 4.22 |
+| new canvas | 70.27 | 7.95 | 2.92 |
+
+Refining by patches does as well as OpenCV's ECC on these, and better where the pictures really differ (13.2 against 18.6 on a pair with a changed border), since patches that disagree drop out. Bicubic resampling scores about a point under bilinear on the rescaled pairs.
+
+**Candidates.** The index on the 7,768 images, four tables, against the 105 pairs that plain Butteraugli puts over 15 and whose overlap differs by at most 10 % in local colour:
+
+| Entries per key | Hits | Pairs passed on | Of the 105 found |
+|---|---|---|---|
+| 8 | 8 | 0.20 % | 102 |
+| 16 | 12 | 0.35 % | 105 |
+| 32 | 16 | 0.68 % | 105 |
+| 32 | 8 | 3.06 % | 105 |
+
+A key that fills up must stop counting: if it keeps voting, its first images are candidates for everything, and 16 entries with 8 hits pass 13 % of the pairs instead of 0.8 %. The BRIEF comparisons are chosen on corners of drawings for an even split and little correlation. Each of the study's folders holds some 70 copies and versions of one picture, which fill keys: 16 entries and 12 hits find 1,054 of the 1,312 crop pairs, 32 and 16 find 1,285, hence those.
+
+**Results.** On this set, through the core at 768 px, threshold 8.5:
+
+| | Butteraugli | Aligned |
+|---|---|---|
+| crops found (1,312) | 0 | 1,285, of which 1,267 under 8.5 |
+| overlays found (492) | 246 | 407 |
+| largest plain copy, with / without the 12–25 % ones | 7.66 / 7.19 | 7.62 / 5.48 |
+| closest version | 9.41 | 9.41 |
+| versions under 8.5 | 0 | 0 |
+
+The versions keep their distance: the overlap of a version with its original still holds what was changed. At 10 the aligned search pairs 23 versions where Butteraugli pairs 9.
+
+On the Tumblr pairs the aligned search finds everything Butteraugli finds, and pairs 34 more at 8.5 that the user deleted or linked, against 2 more the user kept (small GIFs on different canvases, S7) and 1 left. Those 34 are blurred upscales (plain 37 to 225, aligned 3 to 5) and re-framed reposts. A first search takes 40 s against 12–21 s for Butteraugli (24 logical processors, every image decoded for its keypoints); a repeated one 25 s, the scores being stored but not the keypoints.
 
 ## Conclusions
 
@@ -184,16 +226,15 @@ Matching every pair of a large collection is too slow even at 1 ms, so a crop se
 * **T10** (done on the personal branch): area resampling for every algorithm's reduced images.
 * **T11** (done on the personal branch, threshold default 4 %): local colour difference at 64 px: the best cheap algorithm for every plain copy, compression and upscaling included.
 * **T12** (done on the personal branch): Butteraugli as a slow second look at local colour's candidates; through the core, 768 px separates every copy, the tiny ones too, from every version ([02, mode 4](02-comparison-modes.md#mode-4--perceptual-butteraugli-slow-most-accurate-t12-on-the-personal-branch)).
-* **Crops** (T19): a new kind of search in two stages ([§ Crops](#crops)).
+* **Crops** (T19, done on the personal branch): keypoints pick the candidates and lay the pictures over each other, Butteraugli judges the overlap ([§ The aligned search as built](#the-aligned-search-as-built)).
 * **The worse copy:** the rule of [§ Which copy is worse](#which-copy-is-worse) with the JPEG trace, when hints are reworked ([06 § S4](06-stretch-and-ameliorations.md) A3); the JPEG quality, its trace and bytes per pixel as columns (A2) would show the user the same evidence. For lossy steps that aren't JPEG: a learned score such as TOPIQ-NR as the tie-breaker; the WebP trace by re-encoding fell short in its calibration (same section).
-* Hashes, embeddings (SSCD, DINOv2, SigLIP) and the learned full-reference metrics (LPIPS, DISTS) are no help in telling copies from versions; the embeddings are the candidate finders for crops.
+* Hashes, embeddings (SSCD, DINOv2, SigLIP) and the learned full-reference metrics (LPIPS, DISTS) are no help in telling copies from versions; the embeddings can find candidates for crops, though the keypoint index does that without a model.
 
 ## Candidates not tested yet
 
 | Candidate | What it might add | Needs |
 |---|---|---|
 | WebP history in the transform domain: VP8's 4×4 coefficients on its quantiser steps ([§ Which copy is worse](#which-copy-is-worse)) | the lossy steps the JPEG trace can't see | research: a first test finds the lattice and its step, with false lattices from strong JPEGs and upscales |
-| a keypoint index (ORB descriptors in an inverted file or hash tables) | crop candidates without an embedding | design work |
 
 ## Limits and growing the set
 
