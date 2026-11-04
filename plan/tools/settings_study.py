@@ -472,11 +472,23 @@ def effective_quality(img, q, history):
     return 100.0 if codec_of(img) == "lossless" else None
 
 
+LINE_DETAIL = {}
+
+
+def blown_up(small, large, images):
+    """Whether the larger of two images is an upscale of the smaller
+    (study_metrics.line_detail); each pair measured once."""
+    if (small, large) not in LINE_DETAIL:
+        LINE_DETAIL[small, large] = sm.line_detail(images[small]["path"], images[large]["path"])
+    return LINE_DETAIL[small, large] < sm.UPSCALED_LINE_DETAIL
+
+
 def better_copy(i, j, images, quality, history=True, learned=None):
     """Of two images of the same picture, the one judged better: more
-    pixels (over 0.5 % apart); else the higher JPEG-equivalent quality
-    (over 2 apart); at the same quality, both lossless, clearly more detail
-    (an upscaled copy has less) and then the larger file; at the same lossy
+    pixels (over 0.5 % apart), unless the larger is blown up from something
+    like the smaller; else the higher JPEG-equivalent quality (over 2
+    apart); at the same quality, both lossless, clearly more detail (an
+    upscaled copy has less) and then the larger file; at the same lossy
     quality the smaller file, the one converted fewer times; a lossless
     file over one whose quality can't be read; else the larger file.
     learned = (score name, margin): where the JPEG-equivalent quality
@@ -484,7 +496,8 @@ def better_copy(i, j, images, quality, history=True, learned=None):
     than the margin decides first."""
     qi, qj = quality[i], quality[j]
     if abs(qi["pixels"] - qj["pixels"]) > 0.005 * max(qi["pixels"], qj["pixels"]):
-        return i if qi["pixels"] > qj["pixels"] else j
+        large, small = (i, j) if qi["pixels"] > qj["pixels"] else (j, i)
+        return small if blown_up(small, large, images) else large
     ei, ej = effective_quality(images[i], qi, history), effective_quality(images[j], qj, history)
     decided = ei is not None and ej is not None and abs(ei - ej) > 2
     if learned and not decided and qi.get(learned[0]) is not None and qj.get(learned[0]) is not None \
@@ -503,6 +516,9 @@ def better_copy(i, j, images, quality, history=True, learned=None):
     return i if qi["size"] > qj["size"] else j
 
 
+# Upscaled copies against the reduced copy they could have been made from:
+# (better stem, worse stem).
+BLOWN_UP_PAIRS = [("scale-50", "upscale-50-x2"), ("scale-25", "upscale-25-x4")]
 # Copies converted again after a lossy step (study_set.py), and which file
 # of a pair with one of them is better: (better stem, worse stem).
 HISTORY_PAIRS = [("original", "jpeg-q60-to-png"), ("jpeg-q90", "jpeg-q60-to-png"), ("jpeg-q75", "jpeg-q60-to-png"),
@@ -520,17 +536,21 @@ def task_b(images, quality, lines):
               "more re-encodings, or lossy against the original), **resolution** (lossless, one smaller), **crop** "
               "(lossless, full size, one shows less), **web copy** (the original against a copy that is smaller and "
               "compressed), **upscaled** (the original and the copies shrunk and blown back up to full size: the "
-              "same pixel count, less real detail), **lossy history** (copies converted again after a lossy step: "
+              "same pixel count, less real detail), **blown up** (such a copy against the reduced copy it could "
+              "come from: more pixels, nothing added), **lossy history** (copies converted again after a lossy step: "
               "a JPEG saved as PNG, also shifted by 3 px; a q45 JPEG re-saved at q95; a JPEG re-saved as WebP; a "
               "WebP saved as PNG; against files known to be better, `HISTORY_PAIRS`). Per indicator: the share of "
               "pairs where it ranks the worse one lower (ties count half); \"-\" where it has no value for those "
               "images.", ""]
-    groups = {"compression": [], "resolution": [], "crop": [], "web copy": [], "upscaled": [], "lossy history": []}
+    groups = {"compression": [], "resolution": [], "crop": [], "web copy": [], "upscaled": [], "blown up": [], "lossy history": []}
     by_stem = {(img["case"], img["stem"]): i for i, img in enumerate(images)}
     for case in sorted({i["case"] for i in images}):
         for good, bad in HISTORY_PAIRS:
             if (case, good) in by_stem and (case, bad) in by_stem:
                 groups["lossy history"].append((by_stem[(case, good)], by_stem[(case, bad)]))
+        for good, bad in BLOWN_UP_PAIRS:
+            if (case, good) in by_stem and (case, bad) in by_stem:
+                groups["blown up"].append((by_stem[(case, good)], by_stem[(case, bad)]))
         pool = [i for i, img in enumerate(images) if img["case"] == case and img["kind"] in ("original", "copy", "crop")
                 and img["stem"] not in HISTORY_STEMS]
         for i, j in itertools.combinations(pool, 2):
@@ -547,7 +567,8 @@ def task_b(images, quality, lines):
                     better, kind = (i if (qa, -ga) > (qb, -gb) else j), "compression"
                 elif {ca, cb} & {"lossless"} and ca != cb and images[i if ca == "lossless" else j]["kind"] == "original":
                     better, kind = (i if ca == "lossless" else j), "compression"
-            elif ca == cb == "lossless" and ka == kb == 1 and sa != sb and "bilinear" not in stems and "nearest" not in stems:
+            elif ca == cb == "lossless" and ka == kb == 1 and sa != sb and "bilinear" not in stems and "nearest" not in stems \
+                    and "blur" not in stems:  # a blurred copy isn't the better one for being larger
                 better, kind = (i if sa > sb else j), "resolution"
             elif ca == cb == "lossless" and sa == sb == 1 and ka != kb and "rescaled" not in images[i]["stem"] + images[j]["stem"]:
                 better, kind = (i if ka > kb else j), "crop"

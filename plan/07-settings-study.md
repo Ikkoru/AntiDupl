@@ -115,31 +115,37 @@ Versions before the last plain copy, with / without the 12–25 % copies:
 
 ## Which copy is worse
 
-Pairs of the same picture that differ in one way, so one is known to be worse: **compression** (same size, one more lossy: a lower quality of the same codec, more re-encodings, or lossy against the original), **resolution** (lossless, one smaller), **crop** (lossless, full size, one shows less), **web copy** (the original against a smaller compressed copy), **upscaled** (the original and its shrunk-and-blown-up copies: the same pixel count, less real detail), **lossy history** (each copy converted again after a lossy step against files known to be better: the original, the JPEG or WebP it came from, a JPEG of a higher quality; `HISTORY_PAIRS` in `tools/settings_study.py`). The share of pairs where each property ranks the worse one lower (pairs where it has a value):
+Pairs of the same picture that differ in one way, so one is known to be worse: **compression** (same size, one more lossy: a lower quality of the same codec, more re-encodings, or lossy against the original), **resolution** (lossless, one smaller, blurred copies left out: a sharp smaller copy can be the better one), **crop** (lossless, full size, one shows less), **web copy** (the original against a smaller compressed copy), **upscaled** (the original and its shrunk-and-blown-up copies: the same pixel count, less real detail), **blown up** (such a copy against the reduced copy it could come from: more pixels, nothing added), **lossy history** (each copy converted again after a lossy step against files known to be better: the original, the JPEG or WebP it came from, a JPEG of a higher quality; `HISTORY_PAIRS` in `tools/settings_study.py`). The share of pairs where each property ranks the worse one lower (pairs where it has a value):
 
-| Property | compression (192) | resolution (180) | crop (224) | web copy (24) | upscaled (12) | lossy history (52) |
-|---|---|---|---|---|---|---|
-| pixels | 50 % (all equal) | 100 % | 100 % | 100 % | 50 % (all equal) | 58 % |
-| file size | 98 % | 99 % | 96 % | 100 % | 83 % | 35 % |
-| bytes per pixel | 98 % | 1 % | 39 % | 100 % | 83 % | 35 % |
-| JPEG quality of the file's table | 98 % (JPEG pairs) | – | – | – | – | 0 % (12 pairs) |
-| JPEG trace in the pixels | 96 % (68) | – | – | – | – | 88 % (24) |
-| effective JPEG quality (the lower of both; 100 for lossless without a trace) | 97 % | 50 % | 50 % | 100 % | 50 % | 86 % (36) |
-| sharpness (Laplacian variance) | 60 % | 8 % | 31 % | 0 % | 100 % | 92 % |
-| detail lost when halved | 62 % | 7 % | 29 % | 0 % | 100 % | 81 % |
-| AntiDupl blockiness | 95 % | 56 % | 45 % | 96 % | 33 % | 85 % |
-| AntiDupl blurring | 38 % | 34 % | 66 % | 0 % | 100 % | 63 % |
-| TOPIQ-NR (learned, no-reference) | 96 % | 5 % | 47 % | 33 % | 100 % | 94 % |
-| MUSIQ (learned, no-reference) | 92 % | 15 % | 33 % | 42 % | 100 % | 98 % |
-| NIQE (no-reference) | 65 % | 26 % | 33 % | 8 % | 67 % | 71 % |
-| BRISQUE (no-reference) | 45 % | 6 % | 48 % | 0 % | 42 % | 31 % |
-| **the rule**, the file's format and JPEG table only | 100 % | 100 % | 100 % | 100 % | 100 % | 33 % |
-| **the rule** with the JPEG trace | 100 % | 100 % | 100 % | 100 % | 100 % | 83 % |
-| **the rule** with the JPEG trace and TOPIQ-NR deciding ties | 100 % | 100 % | 100 % | 100 % | 100 % | 96 % |
+| Property | compression (192) | resolution (156) | crop (224) | web copy (24) | upscaled (12) | blown up (8) | lossy history (52) |
+|---|---|---|---|---|---|---|---|
+| pixels | 50 % (all equal) | 100 % | 100 % | 100 % | 50 % (all equal) | 0 % | 58 % |
+| file size | 98 % | 99 % | 96 % | 100 % | 83 % | 0 % | 35 % |
+| bytes per pixel | 98 % | 1 % | 39 % | 100 % | 83 % | 100 % | 35 % |
+| JPEG quality of the file's table | 98 % (JPEG pairs) | – | – | – | – | – | 0 % (12 pairs) |
+| JPEG trace in the pixels | 96 % (68) | – | – | – | – | – | 88 % (24) |
+| effective JPEG quality (the lower of both; 100 for lossless without a trace) | 97 % | 50 % | 50 % | 100 % | 50 % | 50 % | 86 % (36) |
+| sharpness (Laplacian variance) | 60 % | 9 % | 31 % | 0 % | 100 % | 100 % | 92 % |
+| detail lost when halved | 62 % | 8 % | 29 % | 0 % | 100 % | 100 % | 81 % |
+| AntiDupl blockiness | 95 % | 54 % | 45 % | 96 % | 33 % | 75 % | 85 % |
+| AntiDupl blurring | 38 % | 40 % | 66 % | 0 % | 100 % | 100 % | 63 % |
+| TOPIQ-NR (learned, no-reference) | 96 % | 6 % | 47 % | 33 % | 100 % | 100 % | 94 % |
+| MUSIQ (learned, no-reference) | 92 % | 17 % | 33 % | 42 % | 100 % | 100 % | 98 % |
+| NIQE (no-reference) | 65 % | 26 % | 33 % | 8 % | 67 % | 88 % | 71 % |
+| BRISQUE (no-reference) | 45 % | 6 % | 48 % | 0 % | 42 % | 100 % | 31 % |
+| **the rule**, the file's format and JPEG table only | 100 % | 100 % | 100 % | 100 % | 100 % | 100 % | 33 % |
+| **the rule** with the JPEG trace | 100 % | 100 % | 100 % | 100 % | 100 % | 100 % | 83 % |
+| **the rule** with the JPEG trace and TOPIQ-NR deciding ties | 100 % | 100 % | 100 % | 100 % | 100 % | 100 % | 96 % |
 
 The no-reference scores are taken on a central 1024 px crop at full size, where compression shows; between sizes (resolution, crops, web copies) they compare different amounts of the picture and mean nothing.
 
-**The rule** (`better_copy` in `tools/settings_study.py`): **more pixels** is better (more than 0.5 % apart); else the higher **effective JPEG quality** (more than 2 apart); at the same quality, both lossless, **clearly more detail** (25 % or more; it unmasks upscaled copies) and then the larger file; at the same lossy quality the **smaller file**, the one converted fewer times (a JPEG re-saved three times at q85 is a slightly larger file than the one saved once); a lossless file over one whose quality can't be read (WebP, AVIF, JPEG XL); else the larger file.
+**The rule** (`better_copy` in `tools/settings_study.py`): **more pixels** is better (more than 0.5 % apart), **unless the larger is blown up** from something like the smaller (below); else the higher **effective JPEG quality** (more than 2 apart); at the same quality, both lossless, **clearly more detail** (25 % or more; it unmasks upscaled copies) and then the larger file; at the same lossy quality the **smaller file**, the one converted fewer times (a JPEG re-saved three times at q85 is a slightly larger file than the one saved once); a lossless file over one whose quality can't be read (WebP, AVIF, JPEG XL); else the larger file.
+
+**Blown-up copies.** More pixels mean nothing on a copy made from a smaller one. The user tells them by eye at high zoom, on thin high-contrast lines with the least blur the artist left: a real larger image holds new information on and around those lines. High-blur resampling instead fills the gap with in-between tones the smaller image doesn't have; low-blur resampling and sharpening leave pixels no brush would place. A lesser sign: the smaller image shows more of the picture. It gets harder without such lines, or under filters.
+
+`line_detail` in `tools/study_metrics.py` measures the high-blur kind: both images cut to what they share, the larger area-reduced to the smaller's size, then the mean absolute Laplacian on the strongest 3 % of the smaller's edges, larger over smaller. A blow-up's edges were widened before it was reduced, so it comes back softer. Under `UPSCALED_LINE_DETAIL` the larger counts as blown up, unless the two show the picture within `UPSCALED_SCALE_MIN` of the same scale, where resampling by a sliver softens the larger by itself.
+
+On the Tumblr run (`tools/upscale_check.py`, on the pairs of different sizes that show the same picture) the 9 pairs whose larger image the user confirmed as an upscale give 0.61–0.83, and the 13 where the user kept the larger 0.98 or more. Other signals on those pairs and the study's, as AUC against the 0.977 of a Sobel-masked version of this one: the slope of the spectrum 0.925, overall detail 0.854, the energy above the smaller's resolution 0.753, and on the edges alone 0.674, because JPEG noise on an upscale counts as added information. Low-blur and sharpened upscales aren't softer on their lines, so this test doesn't see them.
 
 **Lossy history.** A JPEG saved as PNG, or a q45 JPEG re-saved at q95, carries a lossless format or a high quality setting while showing the losses of the first save, and the file's own format and table pick it over better files (33 % right). The pixels still show the first save: a JPEG rounds each 8 × 8 block's DCT coefficients to multiples of its quantisation steps, and decoding or re-saving at a finer step keeps them near those multiples (Fan and de Queiroz 2003). `jpeg_history` in `tools/study_metrics.py` finds the block grid from the pixels (it survives a crop that shifts it), finds per coefficient position the largest step the coefficients cluster on, and gives the IJG quality whose table has those steps: the strongest JPEG compression the pixels went through, whatever the format now. On every JPEG step in the set, q30 to q90, as JPEG, as PNG, shifted by 3 px, or re-saved at q95, it reads the quality within 2.2; it finds no trace in any file without a JPEG step; a q95 or q100 JPEG leaves too fine a trace (its file's table says so anyway). It takes about 0.4 s per image on a central 1536 px crop. With it, the rule gets 83 % of the lossy-history pairs right, and still all the others.
 
@@ -235,6 +241,7 @@ On the Tumblr pairs the aligned search finds everything Butteraugli finds, and p
 | Candidate | What it might add | Needs |
 |---|---|---|
 | WebP history in the transform domain: VP8's 4×4 coefficients on its quantiser steps ([§ Which copy is worse](#which-copy-is-worse)) | the lossy steps the JPEG trace can't see | research: a first test finds the lattice and its step, with false lattices from strong JPEGs and upscales |
+| [resdet](https://github.com/0x09/resdet): the resolution a picture was resampled from, from zero crossings in its DCT spectrum; [getnative](https://github.com/Infiziert90/getnative) for anime, by undoing a resize | blown-up copies that `line_detail` doesn't see | a download. By their documentation they work on traditional resampling, not on AI upscalers, and JPEG gives resdet false hits at multiples of 1/8, which its `-f` filter removes |
 
 ## Limits and growing the set
 

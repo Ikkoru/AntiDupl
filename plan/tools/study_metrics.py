@@ -591,5 +591,83 @@ def detail(path):
     return float(np.sqrt((d * d).mean()))
 
 
+# Below this, the larger image of a pair is taken for one blown up from
+# something like the smaller: known upscales of the study set and of the
+# user's real run reach 0.84, real larger images start at 0.89.
+UPSCALED_LINE_DETAIL = 0.865
+UPSCALED_SCALE_MIN = 1.1
+
+
+def overlap_of(small, large):
+    """The part of two grey arrays that shows the same picture, each at its
+    own resolution: by keypoints on reduced copies, or the whole images
+    when they don't align or OpenCV isn't there."""
+    if cv2 is None:
+        return small, large
+
+    def reduced(g):
+        s = min(1.0, (1200 * 900 / g.size) ** 0.5)
+        if s == 1.0:
+            return g.astype(np.uint8), s
+        return cv2.resize(g, (round(g.shape[1] * s), round(g.shape[0] * s)), interpolation=cv2.INTER_AREA).astype(np.uint8), s
+
+    orb = cv2.ORB_create(nfeatures=2000)
+    (a, sa), (b, sb) = reduced(small), reduced(large)
+    ka, da = orb.detectAndCompute(a, None)
+    kb, db = orb.detectAndCompute(b, None)
+    if da is None or db is None or len(ka) < 8 or len(kb) < 8:
+        return small, large
+    knn = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(da, db, k=2)
+    good = [m[0] for m in knn if len(m) == 2 and m[0].distance < 0.8 * m[1].distance]
+    if len(good) < 10:
+        return small, large
+    src = np.array([ka[m.queryIdx].pt for m in good], np.float32) / sa
+    dst = np.array([kb[m.trainIdx].pt for m in good], np.float32) / sb
+    t, mask = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC, ransacReprojThreshold=3.0 / sb,
+                                          maxIters=4000, confidence=0.995)
+    if t is None or mask.sum() < 12 or np.hypot(t[0, 0], t[1, 0]) < 1e-3:
+        return small, large
+    h, w = small.shape
+    corners = np.array([[0, 0, 1], [w, 0, 1], [w, h, 1], [0, h, 1]], np.float64) @ t.T
+    x0, y0 = max(0.0, corners[:, 0].min()), max(0.0, corners[:, 1].min())
+    x1, y1 = min(float(large.shape[1]), corners[:, 0].max()), min(float(large.shape[0]), corners[:, 1].max())
+    p = np.array([[x0, y0, 1], [x1, y1, 1]], np.float64) @ cv2.invertAffineTransform(t).T
+    sx0, sy0 = max(0, int(np.ceil(p[0, 0]))), max(0, int(np.ceil(p[0, 1])))
+    sx1, sy1 = min(w, int(p[1, 0])), min(h, int(p[1, 1]))
+    q = np.array([[sx0, sy0, 1], [sx1, sy1, 1]], np.float64) @ t.T
+    cut_small = small[sy0:sy1, sx0:sx1]
+    cut_large = large[int(round(q[0, 1])):int(round(q[1, 1])), int(round(q[0, 0])):int(round(q[1, 0]))]
+    return (cut_small, cut_large) if min(cut_small.shape + cut_large.shape) >= 48 else (small, large)
+
+
+def line_detail(small_path, large_path):
+    """How much of the smaller image's sharpness the larger keeps on the
+    picture's strongest lines, both at the smaller's size: the mean absolute
+    Laplacian on the strongest 3 % of the smaller's edges, larger over
+    smaller. A real larger image reduced gives about what the smaller has; one
+    blown up from something like the smaller comes back softer, since its edges
+    were widened before it was reduced. Measured on the lines alone, compression
+    noise elsewhere doesn't count as detail, and small differences of framing
+    don't matter: the two are cut to what they share first. Two images showing
+    the picture at about the same scale get 1: one can't be an upscale of the
+    other, and resampling by a sliver would soften the larger by itself."""
+    small, large = overlap_of(np.asarray(open_image(small_path).convert("L"), dtype=np.float32),
+                              np.asarray(open_image(large_path).convert("L"), dtype=np.float32))
+    if large.size < UPSCALED_SCALE_MIN ** 2 * small.size:
+        return 1.0
+    h, w = small.shape
+    reduced = np.asarray(Image.fromarray(large).resize((w, h), Image.BOX), dtype=np.float32)
+    gy, gx = np.gradient(small)
+    gradient = np.hypot(gx, gy)
+    strong = gradient >= np.percentile(gradient, 97)
+
+    def laplacian(g):
+        p = np.pad(g, 1, mode="symmetric")
+        return np.abs(p[:-2, 1:-1] + p[2:, 1:-1] + p[1:-1, :-2] + p[1:-1, 2:] - 4 * g)
+
+    kept, own = laplacian(reduced)[strong].mean(), laplacian(small)[strong].mean()
+    return float(kept / own) if min(kept, own) >= 0.5 else 1.0  # next to no lines to judge by
+
+
 def same_size_png(src_png, size, out_png):
     Image.open(src_png).convert("RGB").resize(size, Image.BOX).save(out_png)

@@ -77,13 +77,11 @@ def compare_options(threshold_type, shifted=False):
 
 
 # Builds with fractional thresholds hold it as a double (which also moves
-# the fields after it); older ones as a whole-percent int. Builds with the
+# the fields after it); the others as a whole-percent int. Builds with the
 # shifted search have one more flag before the threshold, in what is padding
-# in the double layout, so everything after it stays where it was.
-CompareOptionsInt = compare_options(ctypes.c_int32)
-CompareOptionsDouble = compare_options(ctypes.c_double)
-CompareOptionsShifted = compare_options(ctypes.c_double, shifted=True)
-DOUBLE_LAYOUTS = (CompareOptionsShifted, CompareOptionsDouble)
+# in the double layout, so there everything after it stays where it was.
+INT_LAYOUTS = (compare_options(ctypes.c_int32, shifted=True), compare_options(ctypes.c_int32))
+DOUBLE_LAYOUTS = (compare_options(ctypes.c_double, shifted=True), compare_options(ctypes.c_double))
 MAXIMAL_IMAGE_SIZE_DEFAULT = 8196
 # Builds with Butteraugli (T12) have its working size after the algorithm,
 # in what is padding in the double layout of older builds.
@@ -99,7 +97,7 @@ def read_compare_options(core, h):
     gave."""
     buf = (ctypes.c_byte * 64)()  # room for every layout
     core.adOptionsGet(h, AD_OPTIONS_COMPARE, buf)
-    for cls in DOUBLE_LAYOUTS + (CompareOptionsInt,):
+    for cls in DOUBLE_LAYOUTS + INT_LAYOUTS:
         options = cls.from_buffer(buf)
         if options.maximalImageSize == MAXIMAL_IMAGE_SIZE_DEFAULT and options.typeControl == 0 and options.ratioControl == 1:
             return options, buf
@@ -199,7 +197,7 @@ def main():
         sys.exit("adCreateW failed")
     try:
         cmp_, cmp_buf = read_compare_options(core, h)
-        if isinstance(cmp_, CompareOptionsInt) and a.threshold != int(a.threshold):
+        if isinstance(cmp_, INT_LAYOUTS) and a.threshold != int(a.threshold):
             sys.exit("this build takes whole-percent thresholds only")
         cmp_.thresholdDifference = a.threshold if isinstance(cmp_, DOUBLE_LAYOUTS) else int(a.threshold)
         cmp_.algorithmComparing = a.algorithm
@@ -209,7 +207,7 @@ def main():
         if a.any_ratio:
             cmp_.ratioControl = 0
         if a.shifted:
-            if not isinstance(cmp_, CompareOptionsShifted):
+            if not hasattr(cmp_, "shiftedImage"):
                 sys.exit("this build has no shifted search")
             cmp_.shiftedImage = 1
         if a.butteraugli_size is not None:
