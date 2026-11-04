@@ -4,9 +4,10 @@ line keeps its bytes and its place, which the replay depends on.
 
 Usage: py -3 log_strip.py <decisions.jsonl>
 
-Close the program first. The original is kept beside the log as
-<decisions.jsonl>.original.xz, and is checked by decompressing it before the log
-is touched. Compressing takes several minutes. Refuses a log whose archive
+Close the program first, and leave it closed until this ends: starting it
+writes to the log, and the run then ends with nothing done. The original is
+kept beside the log as <decisions.jsonl>.original.xz, and is checked by
+decompressing it before the log is touched. Compressing takes several minutes. Refuses a log whose archive
 already exists, and one that has no result lines; leaves the log as it was if
 any check fails or the log changes meanwhile.
 
@@ -52,7 +53,7 @@ def strip(path):
     if len(kept) == len(lines):
         sys.exit("no result lines in this log")
     digest = hashlib.sha256(data).hexdigest()
-    print(f"{len(data) / 1e6:.1f} MB, {len(lines)} lines, {len(lines) - len(kept)} of them results; compressing the original, some minutes")
+    print(f"{len(data) / 1e6:.1f} MB, {len(lines)} lines, {len(lines) - len(kept)} of them results; compressing the original, some minutes: leave the program closed")
 
     temporary = archive + ".tmp"
     with open(temporary, "wb") as f:
@@ -80,7 +81,7 @@ def strip(path):
     if (after.st_size, after.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
         os.remove(stripped)
         os.remove(temporary)
-        sys.exit("the log changed meanwhile: nothing changed")
+        sys.exit("NOT DONE: the log changed meanwhile, so nothing changed. Run this again with the program closed throughout")
     os.replace(temporary, archive)
     os.replace(stripped, path)
     print(f"log {sum(map(len, kept)) / 1e6:.1f} MB, {len(kept)} lines; original kept as {archive}, {os.path.getsize(archive) / 1e6:.1f} MB")
