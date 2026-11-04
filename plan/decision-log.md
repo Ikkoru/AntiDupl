@@ -28,7 +28,7 @@ Results loaded when the program opens (the profile's results file) are those of 
 
 **`hint`** is AntiDupl's own suggestion of what to do with the pair (`DeleteFirst`, `DeleteSecond`, `RenameFirstToSecond`, `RenameSecondToFirst`, or `None`). It is not a judgement of which copy is better: the user never follows it and finds it often points at the copy they keep. The build has no measured "which copy is worse" rule; the study's (`better_copy` in `tools/study_metrics.py`) can be run on the logged paths.
 
-**`settings`** on actions: `algorithm`, `threshold`, `reducedImageSize`, and `butteraugliSize` for both Butteraugli algorithms. On `search` also `checkOnEquality`, `transformedImage`, `sizeControl`, `typeControl`, `ratioControl`, `minimalImageSize`, `maximalImageSize`, `compareInsideOneFolder`, `compareInsideOneSearchPath`, `ignoreFrameWidth`, `mistakeDataBase`, `deleteToRecycleBin`.
+**`settings`** on actions: `algorithm`, `threshold`, `reducedImageSize`, and `butteraugliSize` for both Butteraugli algorithms. On `search` also `checkOnEquality`, `transformedImage`, `shiftedImage`, `sizeControl`, `typeControl`, `ratioControl`, `minimalImageSize`, `maximalImageSize`, `compareInsideOneFolder`, `compareInsideOneSearchPath`, `ignoreFrameWidth`, `mistakeDataBase`, `deleteToRecycleBin`.
 
 ## Actions and what they mean for a pair
 

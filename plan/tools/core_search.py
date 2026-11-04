@@ -5,7 +5,7 @@ Usage:
                           [--turbo 0|1] [--algorithm 0|1|3|4|5] [--runs N] [--use-db]
                           [--details] [--collect-threads N] [--transformed]
                           [--images FILE] [--butteraugli-size N] [--frame N]
-                          [--any-ratio]
+                          [--any-ratio] [--shifted]
 
 DLL_DIR     folder holding AntiDupl.dll (e.g. bin\\Release of a build)
 USER_DIR    the engine's user folder (settings, image database); created if
@@ -39,6 +39,8 @@ SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
 --frame N   Ignore frame width in % (AntiDupl's 0 to 12; default 0)
 --any-ratio leaves the core's default "same aspect ratio only" filter off, as
             the user's settings do; crops and new canvases need it
+--shifted   also search shifted copies ("Search shifted image dupls"; mean
+            square and SSIM only)
 
 Prints one line per pair: difference with full precision, the 2-decimal value
 the UI shows, and the two file names; for a pair found as a rotated or mirrored
@@ -62,10 +64,11 @@ IMAGE_TYPES = ["NONE", "BMP", "GIF", "JPEG", "PNG", "TIFF", "EMF", "WMF", "EXIF"
 DEFECTS = ["NONE", "UNKNOWN", "JPEG_END_MARKER_IS_ABSENT", "BLOCKINESS", "BLURRING"]
 
 
-def compare_options(threshold_type):
+def compare_options(threshold_type, shifted=False):
     class CompareOptions(ctypes.Structure):
-        _fields_ = [("checkOnEquality", ctypes.c_int32), ("transformedImage", ctypes.c_int32),
-                    ("sizeControl", ctypes.c_int32), ("typeControl", ctypes.c_int32),
+        _fields_ = [("checkOnEquality", ctypes.c_int32), ("transformedImage", ctypes.c_int32)] + \
+                   ([("shiftedImage", ctypes.c_int32)] if shifted else []) + \
+                   [("sizeControl", ctypes.c_int32), ("typeControl", ctypes.c_int32),
                     ("ratioControl", ctypes.c_int32), ("thresholdDifference", threshold_type),
                     ("minimalImageSize", ctypes.c_int32), ("maximalImageSize", ctypes.c_int32),
                     ("compareInsideOneFolder", ctypes.c_int32), ("compareInsideOneSearchPath", ctypes.c_int32),
@@ -74,9 +77,13 @@ def compare_options(threshold_type):
 
 
 # Builds with fractional thresholds hold it as a double (which also moves
-# the fields after it); older ones as a whole-percent int.
+# the fields after it); older ones as a whole-percent int. Builds with the
+# shifted search have one more flag before the threshold, in what is padding
+# in the double layout, so everything after it stays where it was.
 CompareOptionsInt = compare_options(ctypes.c_int32)
 CompareOptionsDouble = compare_options(ctypes.c_double)
+CompareOptionsShifted = compare_options(ctypes.c_double, shifted=True)
+DOUBLE_LAYOUTS = (CompareOptionsShifted, CompareOptionsDouble)
 MAXIMAL_IMAGE_SIZE_DEFAULT = 8196
 # Builds with Butteraugli (T12) have its working size after the algorithm,
 # in what is padding in the double layout of older builds.
@@ -85,14 +92,16 @@ BUTTERAUGLI_SIZE_OFFSET, BUTTERAUGLI_SIZES = 52, (512, 768)  # the defaults buil
 
 def read_compare_options(core, h):
     """The engine's compare options in the layout its build uses, told by
-    where the default maximal image size lands (a fresh engine), and the
-    buffer they are a view of: adOptionsSet gets the buffer, so fields this
-    script doesn't know keep the values the engine gave."""
-    buf = (ctypes.c_byte * 64)()  # room for either layout
+    where the defaults land on a fresh engine: the maximal image size, and
+    the type filter off beside the aspect ratio filter on, which the shifted
+    flag moves. Also the buffer they are a view of: adOptionsSet gets the
+    buffer, so fields this script doesn't know keep the values the engine
+    gave."""
+    buf = (ctypes.c_byte * 64)()  # room for every layout
     core.adOptionsGet(h, AD_OPTIONS_COMPARE, buf)
-    for cls in (CompareOptionsDouble, CompareOptionsInt):
+    for cls in DOUBLE_LAYOUTS + (CompareOptionsInt,):
         options = cls.from_buffer(buf)
-        if options.maximalImageSize == MAXIMAL_IMAGE_SIZE_DEFAULT:
+        if options.maximalImageSize == MAXIMAL_IMAGE_SIZE_DEFAULT and options.typeControl == 0 and options.ratioControl == 1:
             return options, buf
     sys.exit("unknown compare options layout")
 
@@ -153,6 +162,7 @@ def main():
     ap.add_argument("--butteraugli-size", type=int)
     ap.add_argument("--frame", type=int, default=0)
     ap.add_argument("--any-ratio", action="store_true")
+    ap.add_argument("--shifted", action="store_true")
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -191,16 +201,20 @@ def main():
         cmp_, cmp_buf = read_compare_options(core, h)
         if isinstance(cmp_, CompareOptionsInt) and a.threshold != int(a.threshold):
             sys.exit("this build takes whole-percent thresholds only")
-        cmp_.thresholdDifference = a.threshold if isinstance(cmp_, CompareOptionsDouble) else int(a.threshold)
+        cmp_.thresholdDifference = a.threshold if isinstance(cmp_, DOUBLE_LAYOUTS) else int(a.threshold)
         cmp_.algorithmComparing = a.algorithm
         cmp_.compareInsideOneFolder = 1
         cmp_.checkOnEquality = 1
         cmp_.transformedImage = 1 if a.transformed else 0
         if a.any_ratio:
             cmp_.ratioControl = 0
+        if a.shifted:
+            if not isinstance(cmp_, CompareOptionsShifted):
+                sys.exit("this build has no shifted search")
+            cmp_.shiftedImage = 1
         if a.butteraugli_size is not None:
             size = ctypes.c_int32.from_buffer(cmp_buf, BUTTERAUGLI_SIZE_OFFSET)
-            if not isinstance(cmp_, CompareOptionsDouble) or size.value not in BUTTERAUGLI_SIZES:
+            if not isinstance(cmp_, DOUBLE_LAYOUTS) or size.value not in BUTTERAUGLI_SIZES:
                 sys.exit("this build has no Butteraugli working size")
             size.value = a.butteraugli_size
         assert core.adOptionsSet(h, AD_OPTIONS_COMPARE, cmp_buf) == 0

@@ -269,6 +269,7 @@ namespace AntiDupl.NET.WinForms
             {
                 w.WriteBoolean("checkOnEquality", compare.checkOnEquality);
                 w.WriteBoolean("transformedImage", compare.transformedImage);
+                w.WriteBoolean("shiftedImage", compare.shiftedImage);
                 w.WriteBoolean("sizeControl", compare.sizeControl);
                 w.WriteBoolean("typeControl", compare.typeControl);
                 w.WriteBoolean("ratioControl", compare.ratioControl);
