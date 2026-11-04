@@ -86,8 +86,9 @@ try {
     Set-AdAlgorithm 'ButteraugliAligned'
     $p, $main, $event = Invoke-AdSearch $Exe $s $Search
     Show-Check ($event.settings.algorithm -eq 'ButteraugliAligned' -and $event.pairs -ge 1) "(5) aligned: $($event.pairs) pairs of $($event.images) images"
-    $result = Get-Content -LiteralPath (Join-Path $s 'decisions.jsonl') -Encoding utf8 | Where-Object { $_ -match '"event":"result"' } | Select-Object -Last 1 | ConvertFrom-Json
-    Show-Check ($result.difference -le 8.5 -and $result.difference -gt 0) "(5) its difference: $($result.difference)"
+    # The list shows the first pair at once, which logs it as viewed.
+    $shown = Get-Content -LiteralPath (Join-Path $s 'decisions.jsonl') -Encoding utf8 | Where-Object { $_ -match '"event":"view"' } | Select-Object -Last 1 | ConvertFrom-Json
+    Show-Check ($shown.difference -le 8.5 -and $shown.difference -gt 0) "(5) its difference: $($shown.difference)"
     if ($Shot) {
         Start-Sleep -Seconds 4
         Save-AdWindowPicture $main $Shot

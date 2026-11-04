@@ -2,12 +2,11 @@
 # folder (PowerShell 7; it types a real Ctrl+Z, so the program comes to the
 # front): (1) after the tool bar's threshold list opens and closes, the
 # focus is back on the results list; (2) Ctrl+Z typed after a mistake by
-# hot key writes an "undo" line; (3) a search with more results than
-# DecisionLog.RESULT_LINES_MAX writes that many result lines and says so.
-# The profile asks for SSIM at 50 %. Prints one line per check, PASS or
-# FAIL; a build before these fixes fails all three.
+# hot key writes an "undo" line; (3) a search that finds pairs writes its
+# search line and no result lines. The profile asks for SSIM at 50 %. Prints
+# one line per check, PASS or FAIL; a build before these fixes fails all three.
 #   ui_decision_log_check.ps1 -Exe <exe> -s <new scratch folder> -Search <folder>
-# -Search must give over 10,000 pairs: 200 copies of one picture do.
+# -Search holds a few copies of one picture.
 param([string]$Exe, [string]$s, [string]$Search)
 . (Join-Path $PSScriptRoot 'ui_automation.ps1')
 Add-Type -AssemblyName Microsoft.VisualBasic
@@ -85,5 +84,5 @@ $undo = @($events | Where-Object { $_.event -eq 'undo' }).Count
 
 $searchEvent = @($events | Where-Object { $_.event -eq 'search' })[-1]
 $resultCount = @(Get-Content -LiteralPath (Join-Path $s 'decisions.jsonl') -Encoding utf8 | Where-Object { $_ -match '"event":"result"' }).Count
-$ok = ($searchEvent.pairs -gt 10000) -and ($resultCount -eq 10000) -and ($searchEvent.resultLines -eq 10000)
-"{0} (3) search pairs {1}, resultLines {2}, result lines written {3}" -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $searchEvent.pairs, $searchEvent.resultLines, $resultCount
+$ok = ($searchEvent.pairs -gt 0) -and ($resultCount -eq 0)
+"{0} (3) search pairs {1}, result lines written {2}" -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $searchEvent.pairs, $resultCount

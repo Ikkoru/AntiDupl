@@ -36,8 +36,8 @@ namespace AntiDupl.NET.WinForms
     /// Records what the user decides about result pairs, for the settings
     /// study (plan 07): each action on pairs (delete, mistake, hint,
     /// rename, move) with the pairs it was applied to, each pair the user
-    /// looks at, undo and redo, each search with every result it found,
-    /// each hot key press (HotKeyWatcher), and the program's start and
+    /// looks at, undo and redo, each search, each hot key press
+    /// (HotKeyWatcher), and the program's start and
     /// close, one JSON object per line in decisions.jsonl in the user
     /// folder. A pair that was looked at and got no action was left as it
     /// was. Writing errors are ignored: the log must never get in the way
@@ -48,13 +48,7 @@ namespace AntiDupl.NET.WinForms
     static public class DecisionLog
     {
         // Written on every line; lines without it are version 1.
-        public const int SCHEMA = 3;
-
-        // The result lines after a search: the first ones in the list's
-        // order. A search can find up to the core's result limit (100,000
-        // by default), at about 750 bytes a line; nobody reviews that many,
-        // and the log only grows.
-        public const int RESULT_LINES_MAX = 10000;
+        public const int SCHEMA = 4;
 
         static private string m_lastViewed;
 
@@ -149,12 +143,10 @@ namespace AntiDupl.NET.WinForms
         /// <summary>
         /// A finished (or stopped) search: its folders and settings, how many
         /// images it looked at, and what it found, so a search that found
-        /// nothing leaves a trace too; then one line per result, in the order
-        /// the list shows them first, up to RESULT_LINES_MAX.
+        /// nothing leaves a trace too.
         /// </summary>
-        static public void Search(CoreOptions coreOptions, CoreStatistic statistic, TimeSpan duration, CoreResult[] results)
+        static public void Search(CoreOptions coreOptions, CoreStatistic statistic, TimeSpan duration)
         {
-            int resultLines = results == null ? 0 : Math.Min(results.Length, RESULT_LINES_MAX);
             Write(w =>
             {
                 w.WriteString("event", "search");
@@ -172,25 +164,7 @@ namespace AntiDupl.NET.WinForms
                 w.WriteNumber("pairs", statistic.duplImagePairNumber);
                 w.WriteNumber("defects", statistic.defectImageNumber);
                 w.WriteNumber("seconds", Math.Round(duration.TotalSeconds, 1));
-                w.WriteNumber("resultLines", resultLines);
             });
-            if (results == null)
-                return;
-            var lines = new List<Action<Utf8JsonWriter>>();
-            for (int i = 0; i < resultLines; i++)
-            {
-                int row = i;
-                CoreResult result = results[i];
-                lines.Add(w =>
-                {
-                    w.WriteString("event", "result");
-                    w.WriteNumber("row", row);
-                    w.WriteNumber("group", result.group);
-                    w.WriteNumber("groupSize", result.groupSize);
-                    WritePair(w, result);
-                });
-            }
-            Write(lines);
         }
 
         /// <summary>
@@ -324,30 +298,22 @@ namespace AntiDupl.NET.WinForms
             }
         }
 
+        // One line, appended with a single write.
         static private void Write(Action<Utf8JsonWriter> body)
-        {
-            Write(new Action<Utf8JsonWriter>[] { body });
-        }
-
-        // One line per body, appended with a single write.
-        static private void Write(IEnumerable<Action<Utf8JsonWriter>> bodies)
         {
             try
             {
                 using (MemoryStream stream = new MemoryStream())
                 {
-                    foreach (Action<Utf8JsonWriter> body in bodies)
+                    using (Utf8JsonWriter w = new Utf8JsonWriter(stream, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
                     {
-                        using (Utf8JsonWriter w = new Utf8JsonWriter(stream, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
-                        {
-                            w.WriteStartObject();
-                            w.WriteString("time", DateTime.Now.ToString("o"));
-                            w.WriteNumber("schema", SCHEMA);
-                            body(w);
-                            w.WriteEndObject();
-                        }
-                        stream.WriteByte((byte)'\n');
+                        w.WriteStartObject();
+                        w.WriteString("time", DateTime.Now.ToString("o"));
+                        w.WriteNumber("schema", SCHEMA);
+                        body(w);
+                        w.WriteEndObject();
                     }
+                    stream.WriteByte((byte)'\n');
                     using (FileStream file = new FileStream(FilePath, FileMode.Append, FileAccess.Write, FileShare.Read))
                         stream.WriteTo(file);
                 }
