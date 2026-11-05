@@ -246,6 +246,7 @@ On the Tumblr pairs the aligned search finds everything Butteraugli finds, and p
 ## Limits and growing the set
 
 * Four illustrations by one artist, digital painting with PNG originals. Other artists and styles (photos, pixel art, line art, 3D renders) may move the sizes and thresholds; the user names more folders (T14).
+* **No photographs**, in the set or the real runs, so every threshold here holds for digital art only: a photo's noise and fine texture hide compression that a flat colour shows. What a photo case needs, as for the illustrations: an original straight from the camera or phone, full size and never re-saved, and its real versions, a few to ten: shots of the same scene taken seconds apart, and the same photo edited (exposure, colour, retouching, a filter). `study_set.py` makes the copies itself. The cases should differ in content: a portrait, a smooth sky, foliage or other fine texture, a noisy low-light shot, a document. Copies that really went through a messenger or a social site are worth adding. A real run on a folder of photos, with the decision log, tests the thresholds on real pairs without any of this.
 * The copies are made here; real reposts combine several differences (a crop of a smaller JPEG with a watermark). The decision log of the user's everyday AntiDupl (T17, T18) collects the pairs where the user's decision goes against the difference: explained and named by the kind of difference, they join the set.
 
 ## Tools
