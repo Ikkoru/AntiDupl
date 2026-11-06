@@ -5,7 +5,7 @@ Usage:
                           [--turbo 0|1] [--algorithm 0|1|3|4|5] [--runs N] [--use-db]
                           [--details] [--collect-threads N] [--transformed]
                           [--images FILE] [--butteraugli-size N] [--frame N]
-                          [--any-ratio] [--shifted]
+                          [--any-ratio] [--shifted] [--compare-hardlinks]
 
 DLL_DIR     folder holding AntiDupl.dll (e.g. bin\\Release of a build)
 USER_DIR    the engine's user folder (settings, image database); created if
@@ -40,6 +40,7 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
 --frame N   Ignore frame width in % (AntiDupl's 0 to 12; default 0)
 --any-ratio leaves the core's default "same aspect ratio only" filter off, as
             the user's settings do; crops and new canvases need it
+--compare-hardlinks  turns off "Do not compare hardlinked duplicates"
 --shifted   also search shifted copies ("Search shifted image dupls"; mean
             square and SSIM only)
 
@@ -162,6 +163,7 @@ def main():
     ap.add_argument("--frame", type=int, default=0)
     ap.add_argument("--any-ratio", action="store_true")
     ap.add_argument("--shifted", action="store_true")
+    ap.add_argument("--compare-hardlinks", action="store_true")
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -212,6 +214,14 @@ def main():
             if not hasattr(cmp_, "shiftedImage"):
                 sys.exit("this build has no shifted search")
             cmp_.shiftedImage = 1
+        if a.compare_hardlinks:
+            # After the algorithm, or after the working size in builds with one.
+            flag = ctypes.c_int32.from_buffer(cmp_buf, 52)
+            if flag.value != 1:
+                flag = ctypes.c_int32.from_buffer(cmp_buf, 56)
+            if flag.value != 1:
+                sys.exit("this build has no hard link option")
+            flag.value = 0
         if a.butteraugli_size is not None:
             size = ctypes.c_int32.from_buffer(cmp_buf, BUTTERAUGLI_SIZE_OFFSET)
             if not isinstance(cmp_, DOUBLE_LAYOUTS) or size.value not in BUTTERAUGLI_SIZES:
