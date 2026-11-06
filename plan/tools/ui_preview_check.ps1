@@ -96,8 +96,8 @@ try {
         }
 
         $toolbar = $main.FindFirst($TS::Children, (New-AdCondition $AE::ControlTypeProperty $CT::ToolBar))
-        # Second from the end, before Help; the tool bar's buttons have no names.
-        $button = @($toolbar.FindAll($TS::Children, (New-AdCondition $AE::ControlTypeProperty $CT::Button)))[-2]
+        # The tool bar's one check box: it stays pressed.
+        $button = $toolbar.FindFirst($TS::Children, (New-AdCondition $AE::ControlTypeProperty $CT::CheckBox))
         Check "$view, Highlight button" ([bool]$button) 'True'
         if ($button -and $view -eq 'HorizontalPairTable') {
             Send-AdClick $button $toolbar

@@ -171,7 +171,10 @@ namespace AntiDupl.NET.WinForms
         {
         }
 
-        [ComImport, Guid("42f85136-db7e-439c-85f1-e4075d135fc8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        // IID_IFileOpenDialog, NOT IID_IFileDialog: the methods from
+        // GetResults on exist only behind this one, and through the other
+        // they return garbage with no error.
+        [ComImport, Guid("d57c7288-d4ad-4768-be02-9d969532d960"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         private interface IFileOpenDialog
         {
             [PreserveSig] int Show(IntPtr parent); // IModalWindow
