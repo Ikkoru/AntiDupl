@@ -4,11 +4,13 @@ size, plain and aligned. For the values in CoreOptionsForm
 (THRESHOLD_DIFFERENCE_DEFAULT_BUTTERAUGLI and _WIDE_BUTTERAUGLI).
 
 Usage:
-    py -3 threshold_sizes.py WORK_DIR --dll BIN_RELEASE RUN_DIR...
+    py -3 threshold_sizes.py WORK_DIR --dll BIN_RELEASE [--skip TEXT]... RUN_DIR...
 
 WORK_DIR  a scratch folder: pairs\\<id>\\ gets the two images, scores.tsv the
           scores; a second run reuses the copies
 --dll     a build with both algorithms (the personal branch's bin\\Release)
+--skip    leaves out pairs with this text in a path: folders of copies the
+          user keeps on purpose, whose "mistakes" aren't versions
 RUN_DIR   a run saved by decision_pairs.py --keep: its pairs.tsv, its
           scores.tsv, and aligned-scores.tsv where there is one, with the
           columns n, decision, plain, aligned. A pair comes from the run's
@@ -48,16 +50,18 @@ def run_pairs(run):
     if os.path.exists(aligned):
         return [(r["n"], r["decision"]) for r in read(aligned) if r["plain"] or r["aligned"]]
     return [(r["n"], r["decision"]) for r in read(os.path.join(run, "scores.tsv"))
-            if r["butteraugli-768"] and float(r["butteraugli-768"]) <= 50]
+            if any(r.get(c) and float(r[c]) <= 50 for c in ("butteraugli-768", "aligned-768"))]
 
 
-def collect(runs, pair_dir):
+def collect(runs, pair_dir, skip):
     """Copies each run's pairs to <pair_dir>\\<id>; returns {id: decision}.
     A pair's id is the run's place in the list, then its number."""
     found, missing = {}, 0
     for index, run in enumerate(runs, 1):
         named = {r["n"]: r for r in read(os.path.join(run, "pairs.tsv"))}
         for n, decision in run_pairs(run):
+            if any(text in named[n]["first"] + named[n]["second"] for text in skip):
+                continue
             pair = f"{index}{int(n):05}"
             folder = os.path.join(pair_dir, pair)
             if not os.path.isdir(folder):
@@ -113,12 +117,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("work")
     ap.add_argument("--dll", required=True)
+    ap.add_argument("--skip", action="append", default=[])
     ap.add_argument("runs", nargs="+")
     a = ap.parse_args()
 
     pair_dir = os.path.join(a.work, "pairs")
     os.makedirs(pair_dir, exist_ok=True)
-    pairs = collect(a.runs, pair_dir)
+    pairs = collect(a.runs, pair_dir, a.skip)
     scores = score(a.work, pair_dir, a.dll, pairs)
     columns = list(scores)
     with open(os.path.join(a.work, "scores.tsv"), "w", encoding="utf-8", newline="\n") as f:
