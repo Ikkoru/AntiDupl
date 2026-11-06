@@ -901,6 +901,7 @@ namespace AntiDupl.NET.WinForms
             m_typeControlCheckBox.Text = s.CoreOptionsForm_TypeControlCheckBox_Text;
             m_ratioControlCheckBox.Text = s.CoreOptionsForm_RatioControlCheckBox_Text;
             m_algorithmComparingLabeledComboBox.Text = s.CoreOptionsForm_AlgorithmComparingLabeledComboBox_Text;
+            FitAlgorithmList();
             m_thresholdDifferenceLabeledComboBox.Text = s.CoreOptionsForm_ThresholdDifferenceLabeledComboBox_Text;
             m_butteraugliSizeLabeledComboBox.Text = s.CoreOptionsForm_ButteraugliSizeLabeledComboBox_Text;
             m_minimalImageSizeLabeledIntegerEdit.Text = s.CoreOptionsForm_MinimalImageSizeLabeledIntegerEdit_Text;
@@ -1077,6 +1078,20 @@ namespace AntiDupl.NET.WinForms
             m_thresholdAlgorithm = algorithm;
             m_thresholdButteraugliSize = butteraugliSize;
             SelectThreshold(m_thresholdDifferenceLabeledComboBox.comboBox, threshold);
+        }
+
+        // As wide as the longest name, as far as the tab has room beside the
+        // label; the part that drops down always is.
+        private void FitAlgorithmList()
+        {
+            ComboBox list = m_algorithmComparingLabeledComboBox.comboBox;
+            int widest = 0;
+            foreach (object item in list.Items)
+                widest = Math.Max(widest, TextRenderer.MeasureText(item.ToString(), list.Font).Width);
+            widest += SystemInformation.VerticalScrollBarWidth + 8;
+            list.DropDownWidth = widest;
+            int room = FORM_WIDTH - 45 - TextRenderer.MeasureText(m_algorithmComparingLabeledComboBox.Text, list.Font).Width;
+            list.Width = Math.Max(COMBO_BOX_WIDTH + 115, Math.Min(widest, room));
         }
 
         private void OnOptionChanged(object sender, EventArgs e)

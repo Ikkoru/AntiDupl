@@ -133,6 +133,11 @@ namespace AntiDupl.NET.WinForms
             m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_Butteraugli);
             m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_ButteraugliAligned);
 
+            int widest = 0;
+            foreach (object item in m_algorithmComparingComboBox.Items)
+                widest = Math.Max(widest, TextRenderer.MeasureText(item.ToString(), m_algorithmComparingComboBox.Font).Width);
+            m_algorithmComparingComboBox.Size = new System.Drawing.Size(widest + SystemInformation.VerticalScrollBarWidth + 8, 20);
+
             m_undoButton = InitFactory.ToolButton.Create("UndoButton", null, m_mainMenu.UndoAction);
             m_redoButton = InitFactory.ToolButton.Create("RedoButton", null, m_mainMenu.RedoAction);
 
