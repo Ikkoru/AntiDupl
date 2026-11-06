@@ -263,7 +263,7 @@ namespace AntiDupl.NET.WinForms
             }
         }
 
-        private struct DiffSegment
+        public struct DiffSegment
         {
             public string Text;
             public bool IsDifferent;
@@ -275,7 +275,7 @@ namespace AntiDupl.NET.WinForms
             }
         }
 
-        private List<DiffSegment> BuildDiffSegments(string text, string otherText)
+        static public List<DiffSegment> BuildDiffSegments(string text, string otherText)
         {
             var segments = new List<DiffSegment>();
             int i = 0, j = 0;
