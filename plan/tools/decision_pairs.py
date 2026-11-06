@@ -22,9 +22,10 @@ WORK_DIR  a scratch folder: pairs\\<n>\\ gets the two images as <n>a and
 An image is found by its logged size and modification time, at its own path,
 at the other image's path (a rename moves one onto the other), or in the
 Recycle Bin of its drive under either path; reads only, one file at a time.
-Scores come from core_search.py on WORK_DIR\\pairs, one search per setting,
-the aspect ratio filter off as in the user's settings; a value is missing
-where the setting doesn't pair the two (filtered out, or over the search's
+Scores come from core_search.py on WORK_DIR\\pairs, one search per setting
+(a batch of pairs at a time for the settings with no candidate filter), the
+aspect ratio filter off as in the user's settings; a value is missing where
+the setting doesn't pair the two (filtered out, or over the search's
 threshold). Prints one line per pair: the decision, the
 logged difference, each setting's value, and a * where the setting at its
 default threshold disagrees with the decision (pairs a variant the user
@@ -53,6 +54,14 @@ SETTINGS = [
     ("butteraugli-768", ["--algorithm", "4", "--size", "128", "--threshold", "50", "--butteraugli-size", "768"], 8.5),
     ("aligned-768", ["--algorithm", "5", "--size", "128", "--threshold", "50", "--butteraugli-size", "768"], 8.5),
 ]
+# Without a candidate filter a search at these thresholds pairs most of what it
+# compares, and the core stops at resultCountMax results with the rest of the
+# pairs unscored. A pair's value doesn't depend on the images around it, so
+# these go a batch of pair folders at a time, too few to reach it. The
+# Butteraugli searches stay whole: few results, and the aligned search's
+# candidates depend on the collection, as in a real search.
+WHOLE = ("butteraugli-768", "aligned-768")
+BATCH = 100
 LINE = re.compile(r"^([0-9.]+)  shows \S+  (.+?) \| (.+?)(?:  transform \d+)?$")
 
 
@@ -201,18 +210,21 @@ def main():
         w.writerows(rows)
 
     scores = {r["n"]: {} for r in rows}
+    folders = [os.path.join(pair_dir, d) for d in sorted(os.listdir(pair_dir))]
     for name, args, _ in SETTINGS:
-        out = subprocess.run([sys.executable, os.path.join(HERE, "core_search.py"), a.dll,
-                              os.path.join(a.work, "user-" + name), pair_dir, "--any-ratio"] + args,
-                             capture_output=True, text=True, encoding="ascii", errors="replace").stdout
-        for line in out.splitlines():
-            m = LINE.match(line)
-            if not m:
-                continue
-            na, nb = (os.path.splitext(x)[0] for x in (m.group(2), m.group(3)))
-            if na[:-1] == nb[:-1] and na[:-1].isdigit() and {na[-1], nb[-1]} == {"a", "b"}:
-                n = int(na[:-1])
-                scores[n][name] = min(scores[n].get(name, float("inf")), float(m.group(1)))
+        batches = [[pair_dir]] if name in WHOLE else [folders[i:i + BATCH] for i in range(0, len(folders), BATCH)]
+        for batch in batches:
+            out = subprocess.run([sys.executable, os.path.join(HERE, "core_search.py"), a.dll,
+                                  os.path.join(a.work, "user-" + name), *batch, "--any-ratio"] + args,
+                                 capture_output=True, text=True, encoding="ascii", errors="replace").stdout
+            for line in out.splitlines():
+                m = LINE.match(line)
+                if not m:
+                    continue
+                na, nb = (os.path.splitext(x)[0] for x in (m.group(2), m.group(3)))
+                if na[:-1] == nb[:-1] and na[:-1].isdigit() and {na[-1], nb[-1]} == {"a", "b"}:
+                    n = int(na[:-1])
+                    scores[n][name] = min(scores[n].get(name, float("inf")), float(m.group(1)))
 
     with open(os.path.join(a.work, "scores.tsv"), "w", encoding="utf-8", newline="\n") as f:
         f.write("n\tdecision\tlogged\t" + "\t".join(s[0] for s in SETTINGS) + "\n")

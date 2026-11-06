@@ -1,7 +1,7 @@
 """Run AntiDupl's core (AntiDupl.dll) on a folder and print the duplicate pairs.
 
 Usage:
-    python core_search.py DLL_DIR USER_DIR SEARCH_DIR [--size N] [--threshold N]
+    python core_search.py DLL_DIR USER_DIR SEARCH_DIR... [--size N] [--threshold N]
                           [--turbo 0|1] [--algorithm 0|1|3|4|5] [--runs N] [--use-db]
                           [--details] [--collect-threads N] [--transformed]
                           [--images FILE] [--butteraugli-size N] [--frame N]
@@ -11,8 +11,9 @@ DLL_DIR     folder holding AntiDupl.dll (e.g. bin\\Release of a build)
 USER_DIR    the engine's user folder (settings, image database); created if
             missing. Refuses the real %LOCALAPPDATA%\\AntiDupl.NET and any
             folder with an AntiDupl program next to it (an installed copy's).
-SEARCH_DIR  folder to search (subfolders included), with compare-inside-one-
-            folder on.
+SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
+            folder on. A search stops at the core's resultCountMax results
+            (100,000 by default), with the rest unscored and nothing said.
 --size      reduced image size (AntiDupl's default 32; the user's 128)
 --threshold threshold difference in % (default 1); fractions only with builds
             that take them (a double in the compare options)
@@ -146,7 +147,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dll_dir")
     ap.add_argument("user_dir")
-    ap.add_argument("search_dir")
+    ap.add_argument("search_dir", nargs="+")
     ap.add_argument("--size", type=int, default=32)
     ap.add_argument("--threshold", type=float, default=1)
     ap.add_argument("--turbo", type=int, default=1)
@@ -173,8 +174,9 @@ def main():
         sys.exit("refusing to use the settings folder of an installed AntiDupl (the program sits next to it)")
     os.makedirs(a.user_dir, exist_ok=True)
     # Given a folder that doesn't exist, the core searches elsewhere.
-    if not os.path.isdir(a.search_dir):
-        sys.exit(f"no such folder: {a.search_dir}")
+    for folder in a.search_dir:
+        if not os.path.isdir(folder):
+            sys.exit(f"no such folder: {folder}")
 
     os.add_dll_directory(os.path.abspath(a.dll_dir))
     core = ctypes.CDLL(os.path.join(os.path.abspath(a.dll_dir), "AntiDupl.dll"))
@@ -226,11 +228,12 @@ def main():
             adv.collectThreadCount = a.collect_threads
         assert core.adOptionsSet(h, AD_OPTIONS_ADVANCED, ctypes.byref(adv)) == 0
 
-        buf = (ctypes.c_wchar * (MAX_PATH_EX + 1))()
-        p = os.path.abspath(a.search_dir)
-        buf[:len(p)] = p
-        buf[MAX_PATH_EX] = "\x01"                       # include subfolders
-        assert core.adPathWithSubFolderSetW(h, AD_PATH_SEARCH, ctypes.byref(buf), 1) == 0
+        bufs = ((ctypes.c_wchar * (MAX_PATH_EX + 1)) * len(a.search_dir))()
+        for buf, folder in zip(bufs, a.search_dir):
+            p = os.path.abspath(folder)
+            buf[:len(p)] = p
+            buf[MAX_PATH_EX] = "\x01"                   # include subfolders
+        assert core.adPathWithSubFolderSetW(h, AD_PATH_SEARCH, ctypes.byref(bufs), len(a.search_dir)) == 0
 
         for run in range(a.runs):
             if a.use_db:                                # same order as SearchExecuterForm

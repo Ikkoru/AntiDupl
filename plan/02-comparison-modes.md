@@ -94,14 +94,14 @@ Calibration and cost, the core on the settings study's four illustrations ([07](
 
 At 768 and 1024 px every copy, the tiny ones too, scores below every version; 768 has the wider gap at about two thirds of 1024's cost, hence the default.
 
-**The second threshold** (`THRESHOLD_DIFFERENCE_WIDE_BUTTERAUGLI`) is for a second search: it finds the copies the default misses, and some versions. It comes from the real runs of T14, the first artist's and the Tumblr folder's: the 464 pairs that score up to 50 at 768 px, each scored at every working size, plain and aligned (`tools/threshold_sizes.py`). At 768 px, 8.5 lets through 172 pairs the user acted on (deleted, linked or moved) and 9 kept as mistakes. 15 adds 23 acted on and 16 kept; from 15 to 20, 8 acted on and 26 kept. So 15 is the last value where the pairs added are mostly wanted, and at each other size the second threshold is the one that lets through about the same pairs. The study's versions under it fall as the size grows.
+**The second threshold** (`THRESHOLD_DIFFERENCE_WIDE_BUTTERAUGLI`) is for a second search: it finds the copies the default misses, and some versions. It comes from the real runs of T14, art and photographs: the 1,282 pairs that score up to 50 at 768 px, each scored at every working size, plain and aligned (`tools/threshold_sizes.py`, without the folders of copies the user keeps on purpose). At 768 px, aligned, 8.5 lets through 457 pairs the user acted on (deleted, linked or moved) and 20 kept as mistakes. 15 adds 41 acted on and 26 kept; from 15 to 18, 7 and 20; from 18 to 20, 3 and 21. So 15 is the last value where the pairs added are mostly wanted, on art and on photographs alike, and at each other size the second threshold is the one that lets through about the same pairs. The study's versions under it fall as the size grows.
 
 | Working size | Second threshold | Kept and acted on, plain | Kept and acted on, aligned | Study's versions at or below it (of 3,641) |
 |---|---|---|---|---|
-| 384 | 12 | 22, 196 | 24, 232 | 193 |
-| 512 | 14 | 27, 195 | 30, 231 | 82 |
-| 768 | 15 | 25, 195 | 28, 232 | 75 |
-| 1024 | 16 | 29, 192 | 31, 232 | 48 |
+| 384 | 12 | 26, 396 | 64, 499 | 193 |
+| 512 | 14 | 30, 395 | 60, 498 | 82 |
+| 768 | 15 | 28, 395 | 46, 498 | 75 |
+| 1024 | 16 | 31, 392 | 42, 494 | 48 |
 
 Many of the real images are smaller than 1024 px and aren't enlarged, so 768 and 1024 px score them alike; 1024 px gets 16 rather than 15 from the study's large images, where scores at 1024 px run about a tenth higher.
 
