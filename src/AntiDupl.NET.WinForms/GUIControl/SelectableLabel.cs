@@ -311,7 +311,7 @@ namespace AntiDupl.NET.WinForms
             else if (e.Control && e.KeyCode == Keys.A)
                 SelectAll();
             else
-                Done(e);
+                Done(new KeyEventArgs(e.KeyData)); // not this one: the list ignores a handled key
         }
 
         private void SelectAll()
