@@ -114,7 +114,8 @@ namespace AntiDupl.NET.WinForms
             
             m_thresholdDifferenceComboBox = new ToolStripComboBox();
             m_thresholdDifferenceComboBox.AutoSize = false;
-            m_thresholdDifferenceComboBox.Size = new System.Drawing.Size(54, 20);
+            // The narrowest that shows a value such as "0.25 %" whole.
+            m_thresholdDifferenceComboBox.Size = new System.Drawing.Size(57, 20);
             m_thresholdDifferenceComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
             m_thresholdDifferenceComboBox.FlatStyle = FlatStyle.Popup;
             m_thresholdDifferenceComboBox.SelectedIndexChanged += new EventHandler(OnThresholdDifferenceChanged);
