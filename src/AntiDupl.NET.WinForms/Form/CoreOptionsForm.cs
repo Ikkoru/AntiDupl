@@ -1080,14 +1080,14 @@ namespace AntiDupl.NET.WinForms
             SelectThreshold(m_thresholdDifferenceLabeledComboBox.comboBox, threshold);
         }
 
-        // Fits the longest name beside the arrow; MeasureText's padding
-        // covers the rest of what the box needs and a few pixels more.
+        // The narrowest that shows the longest name whole beside the arrow,
+        // in both of the program's list styles: a pixel less cuts its end.
         public static int AlgorithmListWidth(ComboBox list)
         {
             int widest = 0;
             foreach (object item in list.Items)
                 widest = Math.Max(widest, TextRenderer.MeasureText(item.ToString(), list.Font).Width);
-            return widest + SystemInformation.VerticalScrollBarWidth - 4;
+            return widest + SystemInformation.VerticalScrollBarWidth - 1;
         }
 
         // As wide as the longest name, as far as the tab has room beside the
