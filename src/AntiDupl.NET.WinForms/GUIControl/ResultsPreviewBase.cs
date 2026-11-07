@@ -70,6 +70,7 @@ namespace AntiDupl.NET.WinForms
             m_toolStrip.Renderer = new CustomToolStripSystemRenderer();
             m_toolStrip.AutoSize = true;
             m_toolStrip.AllowClickThrough = true; // one click on an inactive window, as in MainToolStrip
+            m_toolStrip.LayoutCompleted += delegate { FitVerticalBar(); };
 
             m_toolStripPanel = new ToolStripPanel();
             m_toolStripPanel.BackColor = SystemColors.Control;
@@ -144,6 +145,21 @@ namespace AntiDupl.NET.WinForms
 
         protected abstract void AddItems(ResultsOptions.ViewMode viewMode);
 
+        // Ends the buttons' panel at the lowest button shown, for what comes
+        // below it to sit there: buttons hidden after SetViewMode leave the
+        // panel longer than they are.
+        private void FitVerticalBar()
+        {
+            if (m_toolStripPanel.Orientation != Orientation.Vertical)
+                return;
+            int bottom = 0;
+            foreach (ToolStripItem item in m_toolStrip.Items)
+                if (item.Available)
+                    bottom = Math.Max(bottom, item.Bounds.Bottom);
+            if (bottom > 0)
+                m_toolStripPanel.Height = m_toolStrip.Top + bottom;
+        }
+
         public void UpdateResultCounts()
         {
             int total = m_resultsListView.GetTotalResultCount();
@@ -168,7 +184,8 @@ namespace AntiDupl.NET.WinForms
             m_nextButton.ToolTipText = GetToolTip(s.ResultsPreviewBase_NextButton_ToolTip_Text, Keys.Down);
             m_previousButton.ToolTipText = GetToolTip(s.ResultsPreviewBase_PreviousButton_ToolTip_Text, Keys.Up);
             m_resultCounts.SetTitles(s.MainStatusStrip_TotalLabel_Text.TrimEnd(' ', ':'),
-                s.MainStatusStrip_CurrentLabel_Text.TrimEnd(' ', ':'), s.MainStatusStrip_SelectedLabel_Text.TrimEnd(' ', ':'));
+                s.MainStatusStrip_CurrentLabel_Text.TrimEnd(' ', ':'), s.MainStatusStrip_SelectedLabel_Text.TrimEnd(' ', ':'),
+                s.ResultCountsPanel_CurrentShort_Text, s.ResultCountsPanel_SelectedShort_Text);
         }
         
         protected string GetToolTip(string toolTip, Keys hotKey)

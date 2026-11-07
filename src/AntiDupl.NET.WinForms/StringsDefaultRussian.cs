@@ -229,6 +229,8 @@ namespace AntiDupl.NET.WinForms
             s.ResultRowSetter_Difference_HardLink_ToolTip_Text = "Жесткие ссылки: оба имени - один файл";
             s.ResultRowSetter_Difference_ByteIdentical_ToolTip_Text = "Одинаковые файлы";
             s.SelectableLabel_Copy_Text = "Копировать";
+            s.ResultCountsPanel_CurrentShort_Text = "Тек.";
+            s.ResultCountsPanel_SelectedShort_Text = "Выдел.";
             s.ResultRowSetter_Difference_PixelIdentical_ToolTip_Text = "Одинаковые изображения, файлы различаются";
 
             s.ResultsListView_Type_Column_Text = "Тип";
@@ -301,7 +303,7 @@ namespace AntiDupl.NET.WinForms
             s.MainMenu_View_HotKeysMenuItem_Text = "Горячие клавиши";
             s.MainMenu_View_StretchSmallImagesMenuItem_Text = "Растягивать небольшие изображения";
             s.MainMenu_View_ProportionalImageSizeMenuItem_Text = "Пропорциональный размер картинок";
-            s.MainMenu_View_ResultCountsMenuItem_Text = "Счетчики результатов рядом с кнопками";
+            s.MainMenu_View_ResultCountsMenuItem_Text = "Статус на панели инструментов";
             s.MainMenu_View_AlignImagesToDividerMenuItem_Text = "Прижимать картинки к разделителю";
             s.MainMenu_View_ShowNeighbourImageMenuItem_Text = "Показывать соседние изображения";
 

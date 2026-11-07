@@ -1080,15 +1080,22 @@ namespace AntiDupl.NET.WinForms
             SelectThreshold(m_thresholdDifferenceLabeledComboBox.comboBox, threshold);
         }
 
+        // Fits the longest name beside the arrow; MeasureText's padding
+        // covers the rest of what the box needs and a few pixels more.
+        public static int AlgorithmListWidth(ComboBox list)
+        {
+            int widest = 0;
+            foreach (object item in list.Items)
+                widest = Math.Max(widest, TextRenderer.MeasureText(item.ToString(), list.Font).Width);
+            return widest + SystemInformation.VerticalScrollBarWidth - 4;
+        }
+
         // As wide as the longest name, as far as the tab has room beside the
         // label; the part that drops down always is.
         private void FitAlgorithmList()
         {
             ComboBox list = m_algorithmComparingLabeledComboBox.comboBox;
-            int widest = 0;
-            foreach (object item in list.Items)
-                widest = Math.Max(widest, TextRenderer.MeasureText(item.ToString(), list.Font).Width);
-            widest += SystemInformation.VerticalScrollBarWidth + 8;
+            int widest = AlgorithmListWidth(list);
             list.DropDownWidth = widest;
             int room = FORM_WIDTH - 45 - TextRenderer.MeasureText(m_algorithmComparingLabeledComboBox.Text, list.Font).Width;
             list.Width = Math.Max(COMBO_BOX_WIDTH + 115, Math.Min(widest, room));

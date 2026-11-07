@@ -96,7 +96,8 @@ namespace AntiDupl.NET.WinForms
         {
             Visible = m_options.mainFormOptions.toolStripView;
             RenderMode = ToolStripRenderMode.System;
-            ThemedToolStripRenderer.Set(this);
+            ThemedToolStripRenderer renderer = new ThemedToolStripRenderer();
+            Renderer = renderer;
             BackColor = SystemColors.Control;
             GripStyle = ToolStripGripStyle.Hidden;
             // Without it a ToolStrip only activates an inactive window on the
@@ -127,16 +128,6 @@ namespace AntiDupl.NET.WinForms
             m_algorithmComparingComboBox.FlatStyle = FlatStyle.Popup;
             m_algorithmComparingComboBox.SelectedIndexChanged += new EventHandler(OnAlgorithmComparingChanged);
             m_algorithmComparingComboBox.DropDownClosed += new EventHandler(OnListDropDownClosed);
-            m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_SquaredSum);
-            m_algorithmComparingComboBox.Items.Add("SSIM");
-            m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_LocalColor);
-            m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_Butteraugli);
-            m_algorithmComparingComboBox.Items.Add(Resources.Strings.Current.CoreOptionsForm_AlgorithmComparingLabeledComboBox_ButteraugliAligned);
-
-            int widest = 0;
-            foreach (object item in m_algorithmComparingComboBox.Items)
-                widest = Math.Max(widest, TextRenderer.MeasureText(item.ToString(), m_algorithmComparingComboBox.Font).Width);
-            m_algorithmComparingComboBox.Size = new System.Drawing.Size(widest + SystemInformation.VerticalScrollBarWidth + 8, 20);
 
             m_undoButton = InitFactory.ToolButton.Create("UndoButton", null, m_mainMenu.UndoAction);
             m_redoButton = InitFactory.ToolButton.Create("RedoButton", null, m_mainMenu.RedoAction);
@@ -152,6 +143,7 @@ namespace AntiDupl.NET.WinForms
 
             m_highlightButton = InitFactory.ToolButton.Create("HighlightButton.png", null, OnHighlightButtonClicked);
             m_highlightButton.CheckOnClick = true;
+            renderer.FramedWhenChecked = m_highlightButton;
             m_highlightButton.Checked = m_options.resultsOptions.HighlightDifference;
             m_options.resultsOptions.OnHighlightDifferenceChange += delegate
             {
@@ -180,6 +172,7 @@ namespace AntiDupl.NET.WinForms
             m_optionsButton.ToolTipText = s.MainMenu_Search_OptionsMenuItem_Text;
             m_thresholdDifferenceComboBox.ToolTipText = s.CoreOptionsForm_ThresholdDifferenceLabeledComboBox_Text;
             m_algorithmComparingComboBox.ToolTipText = s.CoreOptionsForm_AlgorithmComparingLabeledComboBox_Text;
+            FillAlgorithms();
 
             m_undoButton.ToolTipText = s.MainMenu_Edit_UndoMenuItem_Text;
             m_redoButton.ToolTipText = s.MainMenu_Edit_RedoMenuItem_Text;
@@ -193,6 +186,24 @@ namespace AntiDupl.NET.WinForms
 
             m_highlightButton.ToolTipText = s.CoreOptionsForm_HighlightDifferenceCheckBox_Text;
             m_helpButton.ToolTipText = s.MainMenu_Help_HelpMenuItem_Text;
+        }
+
+        // The algorithm list in the current language, as wide as its longest name.
+        private void FillAlgorithms()
+        {
+            Strings s = Resources.Strings.Current;
+            ComboBox list = m_algorithmComparingComboBox.ComboBox;
+            int selected = list.SelectedIndex;
+            m_settingItems = true;
+            list.Items.Clear();
+            list.Items.Add(s.CoreOptionsForm_AlgorithmComparingLabeledComboBox_SquaredSum);
+            list.Items.Add("SSIM");
+            list.Items.Add(s.CoreOptionsForm_AlgorithmComparingLabeledComboBox_LocalColor);
+            list.Items.Add(s.CoreOptionsForm_AlgorithmComparingLabeledComboBox_Butteraugli);
+            list.Items.Add(s.CoreOptionsForm_AlgorithmComparingLabeledComboBox_ButteraugliAligned);
+            list.SelectedIndex = selected;
+            m_settingItems = false;
+            m_algorithmComparingComboBox.Size = new System.Drawing.Size(CoreOptionsForm.AlgorithmListWidth(list), 20);
         }
 
         private void OnVisibleChanged(bool visible)

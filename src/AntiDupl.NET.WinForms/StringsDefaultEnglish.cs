@@ -229,6 +229,8 @@ namespace AntiDupl.NET.WinForms
             s.ResultRowSetter_Difference_HardLink_ToolTip_Text = "Hard links: both names are one file";
             s.ResultRowSetter_Difference_ByteIdentical_ToolTip_Text = "Identical files";
             s.SelectableLabel_Copy_Text = "Copy";
+            s.ResultCountsPanel_CurrentShort_Text = "Cur.";
+            s.ResultCountsPanel_SelectedShort_Text = "Select.";
             s.ResultRowSetter_Difference_PixelIdentical_ToolTip_Text = "Identical images, the files differ";
 
             s.ResultsListView_Type_Column_Text = "Type";
@@ -301,7 +303,7 @@ namespace AntiDupl.NET.WinForms
             s.MainMenu_View_HotKeysMenuItem_Text = "Hot keys";
             s.MainMenu_View_StretchSmallImagesMenuItem_Text = "Stretch small images";
             s.MainMenu_View_ProportionalImageSizeMenuItem_Text = "Proportional size of images";
-            s.MainMenu_View_ResultCountsMenuItem_Text = "Result counts beside the buttons";
+            s.MainMenu_View_ResultCountsMenuItem_Text = "Status on toolbar";
             s.MainMenu_View_AlignImagesToDividerMenuItem_Text = "Align images to the divider";
             s.MainMenu_View_ShowNeighbourImageMenuItem_Text = "Show neighbour images";
 

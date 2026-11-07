@@ -6,15 +6,27 @@ namespace AntiDupl.NET.WinForms
 {
     /// <summary>
     /// The status bar's counts, for the bar beside the preview's buttons: side
-    /// by side, or stacked for the vertical view's narrow bar, right-aligned
-    /// and cut off at its left edge.
+    /// by side, or stacked under short titles for the vertical view's narrow
+    /// bar, right-aligned and cut off at its left edge.
     /// </summary>
     public class ResultCountsPanel : Control
     {
         private const int GAP = 12;
+        private const int LEFT_PADDING = 1;
+        private const int RIGHT_PADDING = 1;
+        // Side by side, the total keeps this much room, so that the columns
+        // stay put as the count grows.
+        private const string TOTAL_ROOM = "000000";
+        // One pixel under the bar's centre.
+        private const int SIDE_TOP = 1;
+        // Below the bar's row of 5 pixels, this puts the first title's letters
+        // 10 pixels under the lowest button's drawing.
+        private const int STACK_TOP = 3;
+        private const int PAIR_TIGHTENING = 4;
         private const TextFormatFlags FLAGS = TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
 
         private string[] m_titles = { "", "", "" };
+        private string[] m_shortTitles = { "", "", "" };
         private string[] m_values = { "0", "0", "0" };
         private bool m_stacked;
 
@@ -31,9 +43,10 @@ namespace AntiDupl.NET.WinForms
             set { m_stacked = value; Fit(); }
         }
 
-        public void SetTitles(string total, string current, string selected)
+        public void SetTitles(string total, string current, string selected, string currentShort, string selectedShort)
         {
             m_titles = new string[] { total, current, selected };
+            m_shortTitles = new string[] { total, currentShort, selectedShort };
             Fit();
         }
 
@@ -50,7 +63,8 @@ namespace AntiDupl.NET.WinForms
 
         private int ColumnWidth(int i)
         {
-            return Math.Max(Measure(m_titles[i]), Measure(m_values[i]));
+            int width = Math.Max(Measure(m_titles[i]), Measure(m_values[i]));
+            return i == 0 ? Math.Max(width, Measure(TOTAL_ROOM)) : width;
         }
 
         // Side by side the panel is as large as its text; stacked it takes
@@ -59,7 +73,7 @@ namespace AntiDupl.NET.WinForms
         {
             if (!m_stacked)
             {
-                int width = 2 * GAP;
+                int width = LEFT_PADDING + 2 * GAP;
                 for (int i = 0; i < 3; i++)
                     width += ColumnWidth(i);
                 Size = new Size(width + 1, 2 * Font.Height);
@@ -78,20 +92,22 @@ namespace AntiDupl.NET.WinForms
             int line = Font.Height;
             if (m_stacked)
             {
+                int right = ClientSize.Width - RIGHT_PADDING;
                 for (int i = 0; i < 3; i++)
                 {
-                    DrawRight(e.Graphics, m_titles[i], ClientSize.Width, i * 3 * line);
-                    DrawRight(e.Graphics, m_values[i], ClientSize.Width, (i * 3 + 1) * line);
+                    int top = STACK_TOP + i * (3 * line - PAIR_TIGHTENING);
+                    DrawRight(e.Graphics, m_shortTitles[i], right, top);
+                    DrawRight(e.Graphics, m_values[i], right, top + line);
                 }
                 return;
             }
-            int right = 0;
+            int column = LEFT_PADDING;
             for (int i = 0; i < 3; i++)
             {
-                right += ColumnWidth(i);
-                DrawRight(e.Graphics, m_titles[i], right, 0);
-                DrawRight(e.Graphics, m_values[i], right, line);
-                right += GAP;
+                column += ColumnWidth(i);
+                DrawRight(e.Graphics, m_titles[i], column, SIDE_TOP);
+                DrawRight(e.Graphics, m_values[i], column, SIDE_TOP + line);
+                column += GAP;
             }
         }
     }

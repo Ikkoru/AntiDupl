@@ -149,8 +149,8 @@ namespace AntiDupl.NET.WinForms
  
             m_viewMenuItem = new ToolStripMenuItem();
             m_viewMenuItem.DropDownItems.Add(m_view_toolMenuItem);
-            m_viewMenuItem.DropDownItems.Add(m_view_statusMenuItem);
             m_viewMenuItem.DropDownItems.Add(m_view_resultCountsMenuItem);
+            m_viewMenuItem.DropDownItems.Add(m_view_statusMenuItem);
             m_viewMenuItem.DropDownItems.Add(new ToolStripSeparator());
             m_viewMenuItem.DropDownItems.Add(m_view_languageMenuItem);
             m_viewMenuItem.DropDownItems.Add(m_view_colorModeMenuItem);

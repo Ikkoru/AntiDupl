@@ -232,6 +232,8 @@ namespace AntiDupl.NET.WinForms
         public string ResultRowSetter_Difference_HardLink_ToolTip_Text;
         public string ResultRowSetter_Difference_ByteIdentical_ToolTip_Text;
         public string SelectableLabel_Copy_Text;
+        public string ResultCountsPanel_CurrentShort_Text;
+        public string ResultCountsPanel_SelectedShort_Text;
         public string ResultRowSetter_Difference_PixelIdentical_ToolTip_Text;
 
         public string ResultsListView_Type_Column_Text;
