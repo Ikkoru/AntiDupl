@@ -13,7 +13,7 @@ namespace AntiDupl.NET.WinForms
     {
         private const int GAP = 12;
         private const int LEFT_PADDING = 1;
-        private const int RIGHT_PADDING = 2;
+        private const int RIGHT_PADDING = 3;
         // Side by side, the total keeps this much room, so that the columns
         // stay put as the count grows.
         private const string TOTAL_ROOM = "000000";
