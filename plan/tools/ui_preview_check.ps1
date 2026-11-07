@@ -4,8 +4,9 @@
 # <Shot>-<view>.png; prints ok/FAIL per check and PASS or FAIL at the end. The
 # copy check overwrites the clipboard.
 #   pwsh -File ui_preview_check.ps1 -Exe <bin\Release\AntiDupl.NET.WinForms.exe> -s <new scratch folder> -Folder <images> -Shot <prefix>
-# <images>: two or more pictures of one image at different sizes, in two
-# subfolders, so that the aspect ratio filter (turned off here) would part them.
+# <images>: three or more pictures of one image at different sizes, in two
+# subfolders, so that the aspect ratio filter (turned off here) would part them
+# and the list has a second row for the key to move to.
 param([string]$Exe, [string]$s, [string]$Folder, [string]$Shot, [string]$ColorMode = 'Classic')
 . (Join-Path $PSScriptRoot 'ui_automation.ps1')
 $script:failures = 0
