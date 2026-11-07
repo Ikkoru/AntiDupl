@@ -13,16 +13,16 @@ namespace AntiDupl.NET.WinForms
     {
         private const int GAP = 12;
         private const int LEFT_PADDING = 1;
-        private const int RIGHT_PADDING = 1;
+        private const int RIGHT_PADDING = 2;
         // Side by side, the total keeps this much room, so that the columns
         // stay put as the count grows.
         private const string TOTAL_ROOM = "000000";
         // One pixel under the bar's centre.
         private const int SIDE_TOP = 1;
         // Below the bar's row of 5 pixels, this puts the first title's letters
-        // 10 pixels under the lowest button's drawing.
-        private const int STACK_TOP = 3;
-        private const int PAIR_TIGHTENING = 4;
+        // 12 pixels under the lowest button's drawing.
+        private const int STACK_TOP = 5;
+        private const int PAIR_TIGHTENING = 7;
         private const TextFormatFlags FLAGS = TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
 
         private string[] m_titles = { "", "", "" };

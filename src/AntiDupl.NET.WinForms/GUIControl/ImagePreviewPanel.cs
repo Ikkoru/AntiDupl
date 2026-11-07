@@ -276,15 +276,8 @@ namespace AntiDupl.NET.WinForms
         private void MarkDifferences()
         {
             m_imageSizeLabel.ClearMarks();
-            string size = m_imageSizeLabel.Text;
-            int separator = size.IndexOf(" x ");
-            if (separator > 0)
-            {
-                if (m_currentImageInfo.width < m_neighbourImageInfo.width)
-                    m_imageSizeLabel.AddMark(0, separator, ThemeColors.Worse);
-                if (m_currentImageInfo.height < m_neighbourImageInfo.height)
-                    m_imageSizeLabel.AddMark(separator + 3, size.Length - separator - 3, ThemeColors.Worse);
-            }
+            foreach (CharacterRange number in DataGridViewMarkedTextBoxCell.LesserNumbers(m_currentImageInfo, m_neighbourImageInfo))
+                m_imageSizeLabel.AddMark(number.First, number.Length, ThemeColors.Worse);
 
             m_pathLabel.ClearMarks();
             string name = Path.GetFileName(m_currentImageInfo.path);

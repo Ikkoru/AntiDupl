@@ -229,7 +229,7 @@ namespace AntiDupl.NET.WinForms
             s.ResultRowSetter_Difference_HardLink_ToolTip_Text = "Жесткие ссылки: оба имени - один файл";
             s.ResultRowSetter_Difference_ByteIdentical_ToolTip_Text = "Одинаковые файлы";
             s.SelectableLabel_Copy_Text = "Копировать";
-            s.ResultCountsPanel_CurrentShort_Text = "Тек.";
+            s.ResultCountsPanel_CurrentShort_Text = "Текущ.";
             s.ResultCountsPanel_SelectedShort_Text = "Выдел.";
             s.ResultRowSetter_Difference_PixelIdentical_ToolTip_Text = "Одинаковые изображения, файлы различаются";
 
