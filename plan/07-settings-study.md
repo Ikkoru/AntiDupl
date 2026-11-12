@@ -212,7 +212,7 @@ Refining by patches does as well as OpenCV's ECC on these, and better where the 
 
 A key that fills up must stop counting: if it keeps voting, its first images are candidates for everything, and 16 entries with 8 hits pass 13 % of the pairs instead of 0.8 %. The BRIEF comparisons are chosen on corners of drawings for an even split and little correlation. Each of the study's folders holds some 70 copies and versions of one picture, which fill keys: 16 entries and 12 hits find 1,054 of the 1,312 crop pairs, 32 and 16 find 1,285, hence those.
 
-**Results.** On this set, through the core at 768 px, threshold 8.5:
+**Results.** On this set, through the core at 768 px, threshold 8.5 (google/butteraugli, the default then):
 
 | | Butteraugli | Aligned |
 |---|---|---|
