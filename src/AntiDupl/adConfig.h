@@ -122,7 +122,7 @@ namespace ad
     const size_t BUTTERAUGLI_IMAGE_CACHE_BYTES = size_t(512) << 20;
     // Part of the stored scores' key: a change to how a score is computed
     // (the working images, the metric) makes the stored ones stale.
-    const TUInt32 BUTTERAUGLI_SCORE_VERSION = 1;
+    const TUInt32 BUTTERAUGLI_SCORE_VERSION = 2;
     // The aligned search (adAlign.h). Keypoints are found on a grey copy of
     // about this many pixels, whatever the shape: a long strip keeps a width
     // to find corners in, which a limit on the longest side wouldn't leave.
