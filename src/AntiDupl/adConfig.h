@@ -142,7 +142,7 @@ namespace ad
     const size_t ALIGN_INDEX_KEY_ENTRIES_MAX = 32;
     // A pair local colour lets through scores under this without needing
     // alignment: what alignment gains is worth a second score only above it.
-    const double ALIGN_PLAIN_SCORE_MIN = 5.0;
+    const double ALIGN_PLAIN_SCORE_MIN = 7.5;
     // Pairs share at least this share of the smaller image...
     const double ALIGN_OVERLAP_MIN = 0.5;
     // ...and a box at least this wide and high at the working size.
