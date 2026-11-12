@@ -44,6 +44,8 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
 --shifted   also search shifted copies ("Search shifted image dupls"; mean
             square and SSIM only)
 --paths     prints each image's full path instead of its file name
+--max-size N  the largest side searched, in pixels (the core's default
+            8196 leaves taller images out; the user's settings say 99999)
 --tsv FILE  also writes the pairs to FILE in UTF-8: difference, transform,
             first and second path (the printed names lose what isn't ASCII)
 --drop-same-name  takes the pairs whose two files have the same name,
@@ -223,6 +225,7 @@ def main():
     ap.add_argument("--compare-hardlinks", action="store_true")
     ap.add_argument("--paths", action="store_true")
     ap.add_argument("--tsv")
+    ap.add_argument("--max-size", type=int)
     ap.add_argument("--drop-same-name", action="store_true")
     ap.add_argument("--save-results")
     a = ap.parse_args()
@@ -272,6 +275,8 @@ def main():
         cmp_.transformedImage = 1 if a.transformed else 0
         if a.any_ratio:
             cmp_.ratioControl = 0
+        if a.max_size is not None:
+            cmp_.maximalImageSize = a.max_size
         if a.shifted:
             if not hasattr(cmp_, "shiftedImage"):
                 sys.exit("this build has no shifted search")
