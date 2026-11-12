@@ -48,7 +48,7 @@ namespace AntiDupl.NET.WinForms
     static public class DecisionLog
     {
         // Written on every line; lines without it are version 1.
-        public const int SCHEMA = 4;
+        public const int SCHEMA = 5;
 
         static private string m_lastViewed;
 

@@ -38,13 +38,14 @@ function Invoke-AdSearch([string]$Exe, [string]$s, [string]$Search, [switch]$Kee
 
 try {
     $p, $main = Start-AdBuild $Exe $s
+    Expand-AdWindow $main
     $lists = Get-AdLists $main
     $algorithm = $lists | Where-Object { (Get-AdListItems $_) -contains 'SSIM' } | Select-Object -First 1
     $threshold = $lists | Where-Object { $_ -ne $algorithm } | Select-Object -First 1
     $offered = (Get-AdListItems $algorithm) -contains $Name
     Show-Check $offered "(1) the tool bar offers '$Name'"
     Select-AdListItem $algorithm $Name
-    Show-Check ($threshold.Current.Name -eq '8.5') "(1) its threshold on the tool bar: '$($threshold.Current.Name)'"
+    Show-Check ($threshold.Current.Name -eq '12') "(1) its threshold on the tool bar: '$($threshold.Current.Name)'"
 
     $dialog = Open-AdOptions $p $main
     $dAlgorithm = $null; $dThreshold = $null; $dSize = $null
@@ -54,10 +55,10 @@ try {
         elseif ($names -contains '768 px') { $dSize = $c }
         elseif (($names -contains '8.5') -and -not $dThreshold) { $dThreshold = $c }
     }
-    Show-Check ((Get-AdListValue $dAlgorithm) -eq $Name -and (Get-AdListValue $dThreshold) -eq '8.5' -and $dSize.Current.IsEnabled) `
+    Show-Check ((Get-AdListValue $dAlgorithm) -eq $Name -and (Get-AdListValue $dThreshold) -eq '12' -and $dSize.Current.IsEnabled) `
         "(2) Options: '$(Get-AdListValue $dAlgorithm)', threshold $(Get-AdListValue $dThreshold), size list enabled $($dSize.Current.IsEnabled)"
     Select-AdListItem $dSize '1024 px'
-    Show-Check ((Get-AdListValue $dThreshold) -eq '9.5') "(2) at 1024 px the default follows: $(Get-AdListValue $dThreshold)"
+    Show-Check ((Get-AdListValue $dThreshold) -eq '13') "(2) at 1024 px the default follows: $(Get-AdListValue $dThreshold)"
     Select-AdListItem $dSize '768 px'
     Send-AdButton $dialog 'OK'
     Start-Sleep -Seconds 2
@@ -88,7 +89,7 @@ try {
     Show-Check ($event.settings.algorithm -eq 'ButteraugliAligned' -and $event.pairs -ge 1) "(5) aligned: $($event.pairs) pairs of $($event.images) images"
     # The list shows the first pair at once, which logs it as viewed.
     $shown = Get-Content -LiteralPath (Join-Path $s 'decisions.jsonl') -Encoding utf8 | Where-Object { $_ -match '"event":"view"' } | Select-Object -Last 1 | ConvertFrom-Json
-    Show-Check ($shown.difference -le 8.5 -and $shown.difference -gt 0) "(5) its difference: $($shown.difference)"
+    Show-Check ($shown.difference -le 12 -and $shown.difference -gt 0) "(5) its difference: $($shown.difference)"
     if ($Shot) {
         Start-Sleep -Seconds 4
         Save-AdWindowPicture $main $Shot

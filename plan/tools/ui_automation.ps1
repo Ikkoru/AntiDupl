@@ -63,6 +63,16 @@ function Start-AdBuild([string]$Exe, [string]$s, [int]$TimeoutSeconds = 40) {
     return @($p, $main)
 }
 
+# Maximizes a window. A tool bar too narrow for its items moves the last
+# ones into its overflow menu, where UI Automation doesn't see them: at a
+# fresh settings folder's window size the main tool bar's algorithm list
+# is one of them.
+function Expand-AdWindow($window) {
+    $window.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).SetWindowVisualState(
+        [Windows.Automation.WindowVisualState]::Maximized)
+    Start-Sleep -Milliseconds 700
+}
+
 # Closes the program as the user would; ends it by its process id if it
 # doesn't close within the timeout, and says so.
 function Stop-AdBuild($p, $main, [int]$TimeoutSeconds = 15) {

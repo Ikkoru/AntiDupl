@@ -79,7 +79,7 @@ def main():
     p.add_argument("dll")
     p.add_argument("numbers")
     p.add_argument("--pictures")
-    p.add_argument("--threshold", type=float, default=8.5)
+    p.add_argument("--threshold", type=float, default=12.0)
     a = p.parse_args()
     core = ctypes.CDLL(os.path.join(a.dll, "AntiDupl.dll"))
     bp = ctypes.POINTER(Bitmap)

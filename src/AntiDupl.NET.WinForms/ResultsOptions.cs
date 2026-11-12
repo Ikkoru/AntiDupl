@@ -319,7 +319,7 @@ namespace AntiDupl.NET.WinForms
         // CoreOptionsForm.THRESHOLD_DIFFERENCE_DEFAULT_BUTTERAUGLI), so a
         // pair that scores as a copy marks nothing.
         public const int PERCEPTUAL_DIFFERENCE_SIZE = 768;
-        public const float PERCEPTUAL_DIFFERENCE_THRESHOLD_DEFAULT = 8.5F;
+        public const float PERCEPTUAL_DIFFERENCE_THRESHOLD_DEFAULT = 12F;
 
         // Marks the fragments where Butteraugli's difference map, which
         // models how much compression noise the eye ignores, exceeds

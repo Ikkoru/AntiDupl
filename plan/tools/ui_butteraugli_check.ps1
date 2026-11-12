@@ -3,9 +3,9 @@
 # default threshold follow, picture the dialog, OK. Then the saved profile,
 # and after a restart the tool bar's lists.
 #   pwsh -File ui_butteraugli_check.ps1 -Exe <bin\Release\AntiDupl.NET.WinForms.exe> -s <new scratch folder> -Shot <png>
-# Expected: thresholds 8.5 / 6 / 9.5 / 5 for 768 / 512 / 1024 / 384 px,
+# Expected: thresholds 12 / 9 / 13 / 7.5 for 768 / 512 / 1024 / 384 px,
 # 37 thresholds from 0 to 50 without a unit, the profile saving
-# Butteraugli / 9.5 / 1024, and the tool bar showing them after a restart.
+# Butteraugli / 13 / 1024, and the tool bar showing them after a restart.
 param([string]$Exe, [string]$s, [string]$Shot)
 . (Join-Path $PSScriptRoot 'ui_automation.ps1')
 

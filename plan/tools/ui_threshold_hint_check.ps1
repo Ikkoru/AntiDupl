@@ -77,7 +77,7 @@ $languages = [ordered]@{
     German = @{ Title = 'Optionen'; Cancel = 'Abbrechen'; Other = 'Differenz', 'SSIM', 'Local colour difference'
                 Butteraugli = 'Perceptual (Butteraugli)'; Aligned = 'Aligned perceptual (crops, shifts)' }
 }
-$expected = [ordered]@{ '384 px' = '5 and 12'; '512 px' = '6 and 14'; '1024 px' = '9.5 and 16'; '768 px' = '8.5 and 15' }
+$expected = [ordered]@{ '384 px' = '7.5 and 11'; '512 px' = '9 and 13'; '1024 px' = '13 and 16'; '768 px' = '12 and 15' }
 
 try {
     # A first start writes the options file the settings below go in.

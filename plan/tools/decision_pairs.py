@@ -51,8 +51,8 @@ SETTINGS = [
     ("ssim-128", ["--algorithm", "1", "--size", "128", "--threshold", "50"], 1.0),
     ("mean-square", ["--algorithm", "0", "--size", "128", "--threshold", "15"], 5.0),
     ("local-colour", ["--algorithm", "3", "--size", "128", "--threshold", "50"], 4.0),
-    ("butteraugli-768", ["--algorithm", "4", "--size", "128", "--threshold", "50", "--butteraugli-size", "768"], 8.5),
-    ("aligned-768", ["--algorithm", "5", "--size", "128", "--threshold", "50", "--butteraugli-size", "768"], 8.5),
+    ("butteraugli-768", ["--algorithm", "4", "--size", "128", "--threshold", "50", "--butteraugli-size", "768"], 12.0),
+    ("aligned-768", ["--algorithm", "5", "--size", "128", "--threshold", "50", "--butteraugli-size", "768"], 12.0),
 ]
 # Without a candidate filter a search at these thresholds pairs most of what it
 # compares, and the core stops at resultCountMax results with the rest of the
