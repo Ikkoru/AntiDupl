@@ -43,6 +43,7 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
 --compare-hardlinks  turns off "Do not compare hardlinked duplicates"
 --shifted   also search shifted copies ("Search shifted image dupls"; mean
             square and SSIM only)
+--paths     prints each image's full path instead of its file name
 
 Prints one line per pair: difference with full precision, the 2-decimal value
 the UI shows, and the two file names; for a pair found as a rotated or mirrored
@@ -164,6 +165,7 @@ def main():
     ap.add_argument("--any-ratio", action="store_true")
     ap.add_argument("--shifted", action="store_true")
     ap.add_argument("--compare-hardlinks", action="store_true")
+    ap.add_argument("--paths", action="store_true")
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -285,7 +287,9 @@ def main():
                 values[r.second.path] = r.second
                 images[r.first.path] = describe(r.first)
                 images[r.second.path] = describe(r.second)
-                n1, n2 = os.path.basename(r.first.path), os.path.basename(r.second.path)
+                n1, n2 = r.first.path, r.second.path
+                if not a.paths:
+                    n1, n2 = os.path.basename(n1), os.path.basename(n2)
                 transform = f"  transform {r.transform}" if r.transform else ""
                 print(f"{r.difference:.9f}  shows {r.difference:.2f}  {ascii(n1)} | {ascii(n2)}{transform}")
             if a.details:
