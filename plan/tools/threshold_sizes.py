@@ -4,14 +4,17 @@ size, plain and aligned. For the values in CoreOptionsForm
 (THRESHOLD_DIFFERENCE_DEFAULT_BUTTERAUGLI and _WIDE_BUTTERAUGLI).
 
 Usage:
-    py -3 threshold_sizes.py WORK_DIR --dll BIN_RELEASE [--skip TEXT]... RUN_DIR...
+    py -3 threshold_sizes.py WORK_DIR --dll BIN_RELEASE [--skip TEXT]...
+                             [--anchors 8.5,15] RUN_DIR...
 
 WORK_DIR  a scratch folder: pairs\\<id>\\ gets the two images, scores.tsv the
           scores; a second run reuses the copies
 --dll     a build with both algorithms (the personal branch's bin\\Release)
 --skip    leaves out pairs with this text in a path: folders of copies the
           user keeps on purpose, whose "mistakes" aren't versions
-RUN_DIR   a run saved by decision_pairs.py --keep: its pairs.tsv, its
+--anchors the two thresholds at 768 px (the default and the second one) to
+          find the matching ones of at every size for (default 8.5,15)
+RUN_DIR  a run saved by decision_pairs.py --keep: its pairs.tsv, its
           scores.tsv, and aligned-scores.tsv where there is one, with the
           columns n, decision, plain, aligned. A pair comes from the run's
           pairs folder, or else from the two files pairs.tsv names, which
@@ -19,7 +22,7 @@ RUN_DIR   a run saved by decision_pairs.py --keep: its pairs.tsv, its
 
 Prints per size and threshold the pairs the user kept (marked as mistakes) and
 acted on (deleted, linked, moved), then the threshold at each size that lets
-through about the same pairs as 8.5 and 15 at 768 px. Images smaller than a
+through about the same pairs as the anchors at 768 px. Images smaller than a
 working size aren't enlarged, so at the larger sizes small images score alike.
 """
 import argparse
@@ -33,7 +36,6 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SIZES = (384, 512, 768, 1024)
-ANCHORS = (8.5, 15)
 # CoreOptionsForm.ThresholdValues, past 0
 STEPS = [i * 0.5 for i in range(1, 21)] + list(range(11, 21)) + list(range(25, 51, 5))
 LINE = re.compile(r"^([0-9.]+)  shows \S+  (.+?) \| (.+?)(?:  transform \d+)?$")
@@ -118,8 +120,10 @@ def main():
     ap.add_argument("work")
     ap.add_argument("--dll", required=True)
     ap.add_argument("--skip", action="append", default=[])
+    ap.add_argument("--anchors", default="8.5,15")
     ap.add_argument("runs", nargs="+")
     a = ap.parse_args()
+    anchors = [float(x) for x in a.anchors.split(",")]
 
     pair_dir = os.path.join(a.work, "pairs")
     os.makedirs(pair_dir, exist_ok=True)
@@ -137,7 +141,7 @@ def main():
         for step in STEPS:
             cells = (counts(scores[f"{name}-{size}"], pairs, step) for size in SIZES)
             print(f"  {step:>9} " + "".join(f"{k:>7} {x:>6}" for k, x in cells))
-        for anchor in ANCHORS:
+        for anchor in anchors:
             base = counts(scores[f"{name}-768"], pairs, anchor)
             print(f"  as {anchor} at 768 px {base}:")
             for size in SIZES:
