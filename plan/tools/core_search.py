@@ -44,6 +44,15 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
 --shifted   also search shifted copies ("Search shifted image dupls"; mean
             square and SSIM only)
 --paths     prints each image's full path instead of its file name
+--tsv FILE  also writes the pairs to FILE in UTF-8: difference, transform,
+            first and second path (the printed names lose what isn't ASCII)
+--drop-same-name  takes the pairs whose two files have the same name,
+            extension aside, out of the results (printed, written and saved);
+            a DeviantArt download name counts as the archive's (name_key)
+--save-results FILE  saves the result list as an AntiDupl results file
+            (.adr): saved as <profile>.adr in the profiles folder of a
+            scratch settings folder, a build started with -s on that folder
+            shows it
 
 Prints one line per pair: difference with full precision, the 2-decimal value
 the UI shows, and the two file names; for a pair found as a rotated or mirrored
@@ -52,6 +61,7 @@ copy, the transform's number (AD_TRANSFORM_*) after them. Output is ASCII-only.
 import argparse
 import ctypes
 import os
+import re
 import sys
 import time
 
@@ -59,7 +69,9 @@ MAX_PATH_EX = 32768
 MAX_EXIF_SIZE = 260
 AD_OPTIONS_COMPARE, AD_OPTIONS_ADVANCED = 1, 3
 AD_PATH_SEARCH = 0
-AD_FILE_IMAGE_DATA_BASE = 3
+AD_FILE_RESULT, AD_FILE_IMAGE_DATA_BASE = 1, 3
+AD_LOCAL_ACTION_MISTAKE, AD_TARGET_SELECTED = 13, 1
+AD_GLOBAL_ACTION_SET_HINT, AD_GLOBAL_ACTION_SET_GROUP = 0, 1
 AD_SORT_BY_DIFFERENCE = 38
 AD_RESULT_DEFECT_IMAGE, AD_RESULT_DUPL_IMAGE_PAIR = 1, 2
 IMAGE_TYPES = ["NONE", "BMP", "GIF", "JPEG", "PNG", "TIFF", "EMF", "WMF", "EXIF", "ICON", "JP2", "PSD",
@@ -145,6 +157,50 @@ def describe(info):
     return f"{ascii(os.path.basename(info.path))}: {kind} {info.width}x{info.height} exif: {' '.join(exif) or '-'}"
 
 
+def get_results(core, h):
+    results, page_size = [], 256
+    while True:
+        start, count = ctypes.c_size_t(len(results)), ctypes.c_size_t(page_size)
+        page = (ResultW * page_size)()
+        core.adResultGetW(h, ctypes.byref(start), page, ctypes.byref(count))
+        results.extend(page[:count.value])
+        if count.value < page_size:
+            break
+    return results
+
+
+def name_key(path):
+    """A file's name without its extension, with DeviantArt's download name
+    (deviantart_<id>_<title>) read as the archive's (<date> <id> <title>)."""
+    stem = os.path.splitext(os.path.basename(path))[0].casefold()
+    m = re.match(r"(?:\d{4}\.\d\d\.\d\d |deviantart_)(\d+)[ _](.*)$", stem)
+    return (m.group(1), m.group(2)) if m else stem
+
+
+def same_name(r):
+    return r.type == AD_RESULT_DUPL_IMAGE_PAIR and name_key(r.first.path) == name_key(r.second.path)
+
+
+def drop_same_name(core, h, results):
+    """Takes the pairs whose files share a name (extension aside) out of the
+    result list, through the core's Mistake action on them as a selection:
+    the list then saves as the GUI would leave it. The action only adds them
+    to the engine's mistake list, which this script never saves; it touches
+    no file."""
+    core.adSelectionSet.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_size_t, ctypes.c_int32]
+    core.adResultApplyTo.argtypes = [ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32]
+    assert core.adSelectionSet(h, ctypes.byref(ctypes.c_size_t(0)), len(results), 0) == 0
+    marked = [i for i, r in enumerate(results) if same_name(r)]
+    for i in marked:
+        assert core.adSelectionSet(h, ctypes.byref(ctypes.c_size_t(i)), 1, 1) == 0
+    if marked:
+        assert core.adResultApplyTo(h, AD_LOCAL_ACTION_MISTAKE, AD_TARGET_SELECTED) == 0
+    left = get_results(core, h)
+    if len(left) != len(results) - len(marked) or any(same_name(r) for r in left):
+        sys.exit("dropping the same-name pairs left the wrong results")
+    return left
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dll_dir")
@@ -166,6 +222,9 @@ def main():
     ap.add_argument("--shifted", action="store_true")
     ap.add_argument("--compare-hardlinks", action="store_true")
     ap.add_argument("--paths", action="store_true")
+    ap.add_argument("--tsv")
+    ap.add_argument("--drop-same-name", action="store_true")
+    ap.add_argument("--save-results")
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -196,6 +255,7 @@ def main():
     core.adSaveW.argtypes = [ctypes.c_void_p, ctypes.c_int32, ctypes.c_wchar_p]
     core.adLoadW.argtypes = [ctypes.c_void_p, ctypes.c_int32, ctypes.c_wchar_p, ctypes.c_int32]
     core.adClear.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+    core.adResultApply.argtypes = [ctypes.c_void_p, ctypes.c_int32]
     db_dir = os.path.join(os.path.abspath(a.user_dir), "images", f"{a.size}x{a.size}")
 
     h = core.adCreateW(os.path.abspath(a.user_dir))
@@ -257,24 +317,34 @@ def main():
                 sys.exit(f"adSearch error {err}")
             if a.details:
                 print(f"search took {time.perf_counter() - t0:.3f} s")
+            # As the GUI does after a search. NOT optional for a saved list:
+            # a pair without a group fails the core's check when the results
+            # file loads (invalid file format), and the GUI then shows none.
+            core.adResultApply(h, AD_GLOBAL_ACTION_SET_GROUP)
+            core.adResultApply(h, AD_GLOBAL_ACTION_SET_HINT)
             if a.use_db:
                 err = core.adSaveW(h, AD_FILE_IMAGE_DATA_BASE, db_dir)
                 if err:
                     sys.exit(f"saving the image database failed: error {err}")
                 core.adClear(h, AD_FILE_IMAGE_DATA_BASE)
             core.adResultSort(h, AD_SORT_BY_DIFFERENCE, 1)
-            results, page_size = [], 256
-            while True:
-                start, count = ctypes.c_size_t(len(results)), ctypes.c_size_t(page_size)
-                page = (ResultW * page_size)()
-                core.adResultGetW(h, ctypes.byref(start), page, ctypes.byref(count))
-                results.extend(page[:count.value])
-                if count.value < page_size:
-                    break
+            results = get_results(core, h)
+            if a.drop_same_name:
+                results = drop_same_name(core, h, results)
+            if a.save_results:
+                err = core.adSaveW(h, AD_FILE_RESULT, os.path.abspath(a.save_results))
+                if err:
+                    sys.exit(f"saving the results failed: error {err}")
             if a.runs > 1:
                 print(f"-- run {run + 1}")
             images = {}
             values = {}
+            if a.tsv:
+                with open(a.tsv, "w", encoding="utf-8", newline="\n") as f:
+                    f.write("difference\ttransform\tfirst\tsecond\n")
+                    for r in results:
+                        if r.type == AD_RESULT_DUPL_IMAGE_PAIR:
+                            f.write(f"{r.difference:.9f}\t{r.transform}\t{r.first.path}\t{r.second.path}\n")
             for r in results:
                 values[r.first.path] = r.first
                 if r.type == AD_RESULT_DEFECT_IMAGE:
