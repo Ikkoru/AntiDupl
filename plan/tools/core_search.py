@@ -46,6 +46,8 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
 --paths     prints each image's full path instead of its file name
 --max-size N  the largest side searched, in pixels (the core's default
             8196 leaves taller images out; the user's settings say 99999)
+--alpha-ignored  turns off "Compare transparent images as they are shown":
+            the colour under transparent pixels counts, as before the option
 --tsv FILE  also writes the pairs to FILE in UTF-8: difference, transform,
             first and second path (the printed names lose what isn't ASCII)
 --drop-same-name  takes the pairs whose two files have the same name,
@@ -226,6 +228,7 @@ def main():
     ap.add_argument("--paths", action="store_true")
     ap.add_argument("--tsv")
     ap.add_argument("--max-size", type=int)
+    ap.add_argument("--alpha-ignored", action="store_true")
     ap.add_argument("--drop-same-name", action="store_true")
     ap.add_argument("--save-results")
     a = ap.parse_args()
@@ -281,13 +284,19 @@ def main():
             if not hasattr(cmp_, "shiftedImage"):
                 sys.exit("this build has no shifted search")
             cmp_.shiftedImage = 1
+        # The hard link flag comes after the algorithm, or after the working
+        # size in builds with one; the transparency flag after it. Both are on
+        # in a fresh engine of a build that has them.
+        hardlinks = 56 if ctypes.c_int32.from_buffer(cmp_buf, 52).value in BUTTERAUGLI_SIZES else 52
         if a.compare_hardlinks:
-            # After the algorithm, or after the working size in builds with one.
-            flag = ctypes.c_int32.from_buffer(cmp_buf, 52)
-            if flag.value != 1:
-                flag = ctypes.c_int32.from_buffer(cmp_buf, 56)
+            flag = ctypes.c_int32.from_buffer(cmp_buf, hardlinks)
             if flag.value != 1:
                 sys.exit("this build has no hard link option")
+            flag.value = 0
+        if a.alpha_ignored:
+            flag = ctypes.c_int32.from_buffer(cmp_buf, hardlinks + 4)
+            if flag.value != 1:
+                sys.exit("this build has no transparency option")
             flag.value = 0
         if a.butteraugli_size is not None:
             size = ctypes.c_int32.from_buffer(cmp_buf, BUTTERAUGLI_SIZE_OFFSET)
