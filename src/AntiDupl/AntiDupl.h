@@ -436,6 +436,7 @@ extern "C"
 		adAlgorithmComparing algorithmComparing;
 		adInt32 butteraugliSize; // longest side of the images Butteraugli compares
         adBool skipHardlinks;
+        adBool transparentAsShown; // images with transparency compared as shown, not by the colour under it
     };
     typedef adCompareOptions* adCompareOptionsPtr;
 	
