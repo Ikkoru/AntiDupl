@@ -20,7 +20,10 @@ Ignored, the colour under transparent pixels counts as it did before the
 option: the white drawings pair (both plain white), the hidden colours and
 the flattened copies don't.
 
-    py -3 transparency_cases.py <bin\\Release> <new scratch folder>
+    py -3 transparency_cases.py <bin\\Release> <new scratch folder> [--butteraugli]
+
+--butteraugli adds Butteraugli and the aligned search, at 12 and 768 px,
+for builds that have them (the personal branch).
 """
 import os
 import re
@@ -45,6 +48,8 @@ EXPECTED = {
     "bmp-unused-alpha": (True, True),
 }
 ALGORITHMS = [("mean square", "0", "20"), ("SSIM", "1", "30"), ("local colour", "3", "30")]
+# With --butteraugli, for builds that have them: at their default at 768 px.
+BUTTERAUGLI = [("Butteraugli", "4", "12"), ("aligned", "5", "12")]
 
 
 def art(seed):
@@ -69,11 +74,16 @@ def with_hidden(im, rgb):
 
 
 def white_lines(seed):
+    """White on transparency, bold enough that whole thumbnail pixels are
+    opaque: the case TImageComparer::UniformFill's contrast test is for."""
     rng = np.random.default_rng(seed)
     im = Image.new("RGBA", (W, H), (255, 255, 255, 0))
     d = ImageDraw.Draw(im)
     for _ in range(10):
-        d.line([tuple(rng.integers(0, W, 2)), tuple(rng.integers(0, H, 2))], fill=(255, 255, 255, 255), width=6)
+        d.line([tuple(rng.integers(0, W, 2)), tuple(rng.integers(0, H, 2))], fill=(255, 255, 255, 255), width=28)
+    for _ in range(4):
+        x, y = rng.integers(0, W - 120), rng.integers(0, H - 120)
+        d.ellipse([x, y, x + 110, y + 110], fill=(255, 255, 255, 255))
     return im
 
 
@@ -114,18 +124,20 @@ def make(out):
 
 def main():
     dll, out = sys.argv[1], sys.argv[2]
+    algorithms = ALGORITHMS + (BUTTERAUGLI if "--butteraugli" in sys.argv[3:] else [])
     if os.path.exists(out):
         sys.exit("give a folder that doesn't exist yet")
     make(os.path.join(out, "cases"))
     failures = 0
     for case, expected in EXPECTED.items():
-        for algorithm, number, threshold in ALGORITHMS:
+        for algorithm, number, threshold in algorithms:
+            extra = ["--butteraugli-size", "768"] if number in ("4", "5") else []
             for shown in (True, False):
                 user = os.path.join(out, "users", f"{case}-{number}-{int(shown)}")
                 os.makedirs(user)
                 r = subprocess.run([sys.executable, TOOL, dll, user, os.path.join(out, "cases", case),
                                     "--algorithm", number, "--threshold", threshold, "--any-ratio", "--transformed",
-                                    *([] if shown else ["--alpha-ignored"])], capture_output=True, text=True)
+                                    *extra, *([] if shown else ["--alpha-ignored"])], capture_output=True, text=True)
                 if r.returncode:
                     sys.exit(r.stderr)
                 pair = re.match(r"\S+  shows", r.stdout) is not None
