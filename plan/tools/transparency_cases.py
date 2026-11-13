@@ -73,6 +73,12 @@ EXPECTED = {
 # do overlap, and two different drawings then pass the loose thresholds
 # below, which tests nothing of the overlap rule.
 UNTURNED = {"disjoint", "shared-strip"}
+# The cases whose pair shows the same pixels, so its difference is 0.00
+# (below IDENTICAL_MAX, the GUI's orange); every other pair, masked ones
+# above all, must stay above it. A pair found turned or mirrored never shows
+# 0.00: a turned image has no pixel hash.
+IDENTICAL = {"hidden-colour", "bmp-unused-alpha"}
+IDENTICAL_MAX = 0.00001
 ALGORITHMS = [("mean square", "0", "20"), ("SSIM", "1", "30"), ("local colour", "3", "30")]
 # With --butteraugli, for builds that have them: at their default at 768 px.
 BUTTERAUGLI = [("Butteraugli", "4", "12"), ("aligned", "5", "12")]
@@ -192,11 +198,20 @@ def main():
                                     *extra, *flags], capture_output=True, text=True)
                 if r.returncode:
                     sys.exit(r.stderr)
-                pair = re.match(r"\S+  shows", r.stdout) is not None
+                m = re.match(r"(\S+)  shows", r.stdout)
+                pair = m is not None
                 ok = pair == want
+                note = ""
+                if pair:
+                    difference = float(m.group(1))
+                    identical = difference < IDENTICAL_MAX
+                    if identical != (case in IDENTICAL):
+                        ok = False
+                    note = f" {difference:.6f}{' (should be 0.00)' if case in IDENTICAL and not identical else ''}" \
+                           f"{' (should not be 0.00)' if identical and case not in IDENTICAL else ''}"
                 failures += not ok
                 print(f"{'PASS' if ok else 'FAIL'}  {case:18} {algorithm:13} {setting:8}"
-                      f"{'pair' if pair else 'no pair':8} (should be {'pair' if want else 'no pair'})")
+                      f"{'pair' if pair else 'no pair':8} (should be {'pair' if want else 'no pair'}){note}")
     print("all passed" if not failures else f"{failures} FAILED")
     return 1 if failures else 0
 
