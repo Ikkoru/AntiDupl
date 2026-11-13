@@ -314,6 +314,7 @@ namespace AntiDupl.NET.Core.Original
             public int butteraugliSize;
             public int skipHardlinks;
             public int transparentAsShown;
+            public int ignoreTransparent;
         }
 
         [StructLayout(LayoutKind.Sequential)]

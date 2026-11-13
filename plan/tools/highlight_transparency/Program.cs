@@ -110,26 +110,30 @@ static class Program
         return bitmap;
     }
 
+    // The transparency options: both off; Improve transparent image
+    // comparison on; and Ignore areas with transparency in both images too.
+    enum Mode { Off, On, Masked }
+
 #if PERCEPTUAL
     // The personal branch's perceptual highlight (Ignore compression
     // noise): Butteraugli's difference maps through the core.
     static AntiDupl.NET.Core.CoreLib Core;
 
-    static int Marked(Bitmap a, Bitmap b, bool asShown, ResultsOptions options)
+    static int Marked(Bitmap a, Bitmap b, Mode mode, ResultsOptions options)
     {
         options.NotHighlightIfFragmentsMoreThan = false;
         options.HighlightAllDifferences = true;
-        var pairs = ResultsPreviewDuplPair.GetPixelPairs(a, b, asShown);
+        var pairs = ResultsPreviewDuplPair.GetPixelPairs(a, b, mode != Mode.Off, mode == Mode.Masked);
         if (!ResultsPreviewDuplPair.PerceptualFragments(Core, options, pairs, out var chosen1, out var chosen2))
             return -1;
         return Math.Max(chosen1.Count, chosen2.Count);
     }
 #else
-    static int Marked(Bitmap a, Bitmap b, bool asShown, ResultsOptions options)
+    static int Marked(Bitmap a, Bitmap b, Mode mode, ResultsOptions options)
     {
         var fa = new List<ComparableBitmap[]>();
         var fb = new List<ComparableBitmap[]>();
-        ResultsPreviewDuplPair.GetFragments(a, b, options, asShown, fa, fb);
+        ResultsPreviewDuplPair.GetFragments(a, b, options, mode != Mode.Off, mode == Mode.Masked, fa, fb);
         int marked = 0;
         for (int i = 0; i < fa[0].Length; i++)
             if (ResultsPreviewDuplPair.Similarity(fa, fb, i) < options.DifferenceThreshold)
@@ -158,10 +162,12 @@ static class Program
     {
         ResultsOptions options = new ResultsOptions();
         int max = options.NotHighlightMaxFragments;
-        int n = 0, offShown = 0, onShown = 0, offNone = 0, onNone = 0, fewer = 0, more = 0;
-        long offSum = 0, onSum = 0;
+        Mode[] modes = { Mode.Off, Mode.On, Mode.Masked };
+        int n = 0;
+        int[] shown = new int[3], none = new int[3];
+        long[] sums = new long[3];
         using var writer = new System.IO.StreamWriter(output, false, new System.Text.UTF8Encoding(false));
-        writer.WriteLine("off\ton\tfirst\tsecond");
+        writer.WriteLine("off\ton\tmasked\tfirst\tsecond");
         foreach (string line in System.IO.File.ReadLines(tsv, System.Text.Encoding.UTF8))
         {
             string[] f = line.Split('\t');
@@ -176,23 +182,21 @@ static class Program
             using (a) using (b)
             {
                 if (!HasAlpha(a) && !HasAlpha(b)) continue;
-                int off = Marked(a, b, false, options), on = Marked(a, b, true, options);
+                int[] marked = Array.ConvertAll(modes, m => Marked(a, b, m, options));
                 n++;
-                offSum += off; onSum += on;
-                if (off <= max) offShown++;
-                if (on <= max) onShown++;
-                if (off == 0) offNone++;
-                if (on == 0) onNone++;
-                if (on < off) fewer++;
-                if (on > off) more++;
-                writer.WriteLine($"{off}\t{on}\t{p1}\t{p2}");
+                for (int m = 0; m < 3; m++)
+                {
+                    sums[m] += marked[m];
+                    if (marked[m] <= max) shown[m]++;
+                    if (marked[m] == 0) none[m]++;
+                }
+                writer.WriteLine($"{marked[0]}\t{marked[1]}\t{marked[2]}\t{p1}\t{p2}");
             }
         }
-        Console.WriteLine($"pairs with transparency: {n}");
-        Console.WriteLine($"marked fragments, mean: off {(double)offSum / Math.Max(1, n):F1}, on {(double)onSum / Math.Max(1, n):F1}");
-        Console.WriteLine($"none marked: off {offNone}, on {onNone}");
-        Console.WriteLine($"at most {max} marked (so the marks show): off {offShown}, on {onShown}");
-        Console.WriteLine($"on marks fewer: {fewer}, more: {more}");
+        Console.WriteLine($"pairs with transparency: {n}; off / on / masked:");
+        Console.WriteLine($"marked fragments, mean: {string.Join(" / ", Array.ConvertAll(sums, s => (s / (double)Math.Max(1, n)).ToString("F1")))}");
+        Console.WriteLine($"none marked: {string.Join(" / ", none)}");
+        Console.WriteLine($"at most {max} marked (so the marks show): {string.Join(" / ", shown)}");
         return 0;
     }
 
@@ -227,19 +231,30 @@ static class Program
         Func<int, int, byte[]> busy = (x, y) => noise[y * W + x];
 
         Bitmap overWhiteHiddenWhite = Render(Drawing, white, null);
-        var cases = new List<(string name, Bitmap a, Bitmap b, string expectOn)>
+        // A picture to lay a drawing over: the moved drawing over the pattern.
+        Bitmap sceneBitmap = Render(Moved, null, busy);
+        Func<int, int, byte[]> scene = (x, y) =>
         {
-            ("hidden white vs hidden black", overWhiteHiddenWhite, Render(Drawing, black, null), "none"),
-            ("transparent vs flattened over white", overWhiteHiddenWhite, Render(Drawing, null, Plain(white)), "none"),
-            ("transparent vs flattened over black", overWhiteHiddenWhite, Render(Drawing, null, Plain(black)), "none"),
-            ("transparent vs flattened over tan", Render(Drawing, black, null), Render(Drawing, null, Plain(tan)), "none"),
-            ("flattened over tan vs transparent", Render(Drawing, null, Plain(tan)), Render(Drawing, black, null), "none"),
-            ("transparent vs over a patterned background", overWhiteHiddenWhite, Render(Drawing, null, busy), "some"),
-            ("white lines on transparency vs plain white", Render(WhiteLines, white, null), Render(Array.Empty<Shape>(), null, Plain(white)), "some"),
-            ("two different drawings on transparency", overWhiteHiddenWhite, Render(Moved, white, null), "some"),
-            ("two different black drawings on transparency", Render(Black(Drawing), black, null), Render(Black(Moved), black, null), "some"),
-            ("alpha 0 everywhere vs the same opaque", Render(Drawing, white, Plain(tan)), Render(Drawing, null, Plain(tan)), "none"),
-            ("opaque vs the same moved", Render(Drawing, null, Plain(white)), Render(Moved, null, Plain(white)), "same as off"),
+            Color c = sceneBitmap.GetPixel(x, y);
+            return new byte[] { c.B, c.G, c.R };
+        };
+        // Expected marks with the option on, and with transparent areas
+        // ignored as well: none, some, or the same as in the setting before.
+        var cases = new List<(string name, Bitmap a, Bitmap b, string expectOn, string expectMasked)>
+        {
+            ("hidden white vs hidden black", overWhiteHiddenWhite, Render(Drawing, black, null), "none", "none"),
+            ("transparent vs flattened over white", overWhiteHiddenWhite, Render(Drawing, null, Plain(white)), "none", "none"),
+            ("transparent vs flattened over black", overWhiteHiddenWhite, Render(Drawing, null, Plain(black)), "none", "none"),
+            ("transparent vs flattened over tan", Render(Drawing, black, null), Render(Drawing, null, Plain(tan)), "none", "none"),
+            ("flattened over tan vs transparent", Render(Drawing, null, Plain(tan)), Render(Drawing, black, null), "none", "none"),
+            ("transparent vs over a patterned background", overWhiteHiddenWhite, Render(Drawing, null, busy), "some", "none"),
+            ("transparent vs laid over another picture", overWhiteHiddenWhite, Render(Drawing, null, scene), "some", "none"),
+            ("another drawing over the pattern", overWhiteHiddenWhite, Render(Moved, null, busy), "some", "some"),
+            ("white lines on transparency vs plain white", Render(WhiteLines, white, null), Render(Array.Empty<Shape>(), null, Plain(white)), "some", "some"),
+            ("two different drawings on transparency", overWhiteHiddenWhite, Render(Moved, white, null), "some", "some"),
+            ("two different black drawings on transparency", Render(Black(Drawing), black, null), Render(Black(Moved), black, null), "some", "some"),
+            ("alpha 0 everywhere vs the same opaque", Render(Drawing, white, Plain(tan)), Render(Drawing, null, Plain(tan)), "none", "none"),
+            ("opaque vs the same moved", Render(Drawing, null, Plain(white)), Render(Moved, null, Plain(white)), "same", "same"),
         };
         // The alpha-0 case: the flattened pixels with their alpha cleared.
         {
@@ -254,18 +269,16 @@ static class Program
 
         ResultsOptions options = new ResultsOptions();
         int failures = 0;
-        Console.WriteLine($"{"pair",-45} {"off",4} {"on",4}  expected on");
+        static bool Meets(string expect, int marked, int before) =>
+            expect switch { "none" => marked == 0, "some" => marked > 0, _ => marked == before };
+        Console.WriteLine($"{"pair",-45} {"off",4} {"on",4} {"mask",4}  expected on, masked");
         foreach (var c in cases)
         {
-            int off = Marked(c.a, c.b, false, options), on = Marked(c.a, c.b, true, options);
-            bool pass = c.expectOn switch
-            {
-                "none" => on == 0,
-                "some" => on > 0,
-                _ => on == off,
-            };
+            int off = Marked(c.a, c.b, Mode.Off, options), on = Marked(c.a, c.b, Mode.On, options);
+            int masked = Marked(c.a, c.b, Mode.Masked, options);
+            bool pass = Meets(c.expectOn, on, off) && Meets(c.expectMasked, masked, on);
             if (!pass) failures++;
-            Console.WriteLine($"{c.name,-45} {off,4} {on,4}  {c.expectOn,-12} {(pass ? "PASS" : "FAIL")}");
+            Console.WriteLine($"{c.name,-45} {off,4} {on,4} {masked,4}  {c.expectOn + ", " + c.expectMasked,-12} {(pass ? "PASS" : "FAIL")}");
         }
         Console.WriteLine(failures == 0 ? "all pass" : $"{failures} FAIL");
         return failures == 0 ? 0 : 1;

@@ -63,6 +63,12 @@ namespace AntiDupl.NET.Core
         /// existed.
         /// </summary>
         public bool transparentAsShown = true;
+        /// <summary>
+        /// With transparentAsShown, pairs with transparency also compared
+        /// only where the images with transparency are opaque. Off in a
+        /// profile saved before the option existed.
+        /// </summary>
+        public bool ignoreTransparent = false;
 
         public CoreCompareOptions()
         {
@@ -85,6 +91,7 @@ namespace AntiDupl.NET.Core
             butteraugliSize = compareOptions.butteraugliSize;
             skipHardlinks = compareOptions.skipHardlinks;
             transparentAsShown = compareOptions.transparentAsShown;
+            ignoreTransparent = compareOptions.ignoreTransparent;
         }
 
         public CoreCompareOptions(ref CoreDll.adCompareOptions compareOptions)
@@ -104,6 +111,7 @@ namespace AntiDupl.NET.Core
             butteraugliSize = compareOptions.butteraugliSize;
             skipHardlinks = compareOptions.skipHardlinks != CoreDll.FALSE;
             transparentAsShown = compareOptions.transparentAsShown != CoreDll.FALSE;
+            ignoreTransparent = compareOptions.ignoreTransparent != CoreDll.FALSE;
         }
 
         public void ConvertTo(ref CoreDll.adCompareOptions compareOptions)
@@ -123,6 +131,7 @@ namespace AntiDupl.NET.Core
             compareOptions.butteraugliSize = butteraugliSize;
             compareOptions.skipHardlinks = skipHardlinks ? CoreDll.TRUE : CoreDll.FALSE;
             compareOptions.transparentAsShown = transparentAsShown ? CoreDll.TRUE : CoreDll.FALSE;
+            compareOptions.ignoreTransparent = ignoreTransparent ? CoreDll.TRUE : CoreDll.FALSE;
         }
 
         public CoreCompareOptions Clone()
@@ -169,7 +178,8 @@ namespace AntiDupl.NET.Core
                 compareInsideOneSearchPath == compareOptions.compareInsideOneSearchPath &&
                 butteraugliSize == compareOptions.butteraugliSize &&
                 skipHardlinks == compareOptions.skipHardlinks &&
-                transparentAsShown == compareOptions.transparentAsShown;
+                transparentAsShown == compareOptions.transparentAsShown &&
+                ignoreTransparent == compareOptions.ignoreTransparent;
         }
 
         public bool CheckOnEquality
@@ -299,6 +309,16 @@ namespace AntiDupl.NET.Core
             {
                 transparentAsShown = value;
                 NotifyPropertyChanged("TransparentAsShown");
+            }
+        }
+
+        public bool IgnoreTransparent
+        {
+            get { return ignoreTransparent; }
+            set
+            {
+                ignoreTransparent = value;
+                NotifyPropertyChanged("IgnoreTransparent");
             }
         }
 

@@ -282,6 +282,55 @@ namespace ad
         return score;
     }
 
+    double TButteraugliStore::MaskedScore(TImageDataPtr pFirst, TImageDataPtr pSecond, adTransformType transform)
+    {
+        TWorkImagePtr first = Image(pFirst), second = Image(pSecond);
+        if (!first->bgr || !second->bgr)
+            return -1;
+        // Over white and over black, the first turned; an opaque image is
+        // the same over both.
+        TView views[4];
+        const TView * sources[4] = { first->bgr.get(), first->bgrBlack ? first->bgrBlack.get() : first->bgr.get(),
+            second->bgr.get(), second->bgrBlack ? second->bgrBlack.get() : second->bgr.get() };
+        const TView * pictures[4];
+        for (int i = 0; i < 4; ++i)
+        {
+            pictures[i] = sources[i];
+            if (i < 2 && transform != AD_TRANSFORM_TURN_0)
+            {
+                Transform(*sources[i], views[i], transform);
+                pictures[i] = &views[i];
+            }
+        }
+        const bool firstSmaller = pictures[0]->width * pictures[0]->height <= pictures[2]->width * pictures[2]->height;
+        const size_t w = firstSmaller ? pictures[0]->width : pictures[2]->width;
+        const size_t h = firstSmaller ? pictures[0]->height : pictures[2]->height;
+        TView resized[4];
+        for (int i = 0; i < 4; ++i)
+        {
+            if (pictures[i]->width == w && pictures[i]->height == h)
+                continue;
+            resized[i].Recreate(w, h, TView::Bgr24);
+            AreaResize(*pictures[i], resized[i]);
+            pictures[i] = &resized[i];
+        }
+        // Over a picture c a pixel is black + (white - black) * c / 255,
+        // c the other one over white.
+        TView a(w, h, TView::Bgr24), b(w, h, TView::Bgr24);
+        for (size_t y = 0; y < h; ++y)
+        {
+            const TUInt8 * fw = pictures[0]->data + y * pictures[0]->stride, * fb = pictures[1]->data + y * pictures[1]->stride;
+            const TUInt8 * sw = pictures[2]->data + y * pictures[2]->stride, * sb = pictures[3]->data + y * pictures[3]->stride;
+            TUInt8 * qa = a.data + y * a.stride, * qb = b.data + y * b.stride;
+            for (size_t x = 0; x < 3 * w; ++x)
+            {
+                qa[x] = TUInt8(fb[x] + ((int(fw[x]) - fb[x]) * sw[x] + 127) / 255);
+                qb[x] = TUInt8(sb[x] + ((int(sw[x]) - sb[x]) * fw[x] + 127) / 255);
+            }
+        }
+        return Compute(a, b, AD_TRANSFORM_TURN_0);
+    }
+
     void TButteraugliStore::SetKeypoints(TImageDataPtr pImageData, const TView & gray)
     {
         std::shared_ptr<TKeypoints> keypoints = std::make_shared<TKeypoints>();

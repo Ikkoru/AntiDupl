@@ -136,6 +136,7 @@ namespace ad
 		m_options.push_back(TOption(&compare.butteraugliSize, TEXT("CompareOptions"), TEXT("ButteraugliSize"), BUTTERAUGLI_SIZE_DEFAULT, BUTTERAUGLI_SIZE_MIN, BUTTERAUGLI_SIZE_MAX));
         m_options.push_back(TOption(&compare.skipHardlinks, TEXT("CompareOptions"), TEXT("SkipHardlinks"), TRUE, FALSE, TRUE));
         m_options.push_back(TOption(&compare.transparentAsShown, TEXT("CompareOptions"), TEXT("TransparentAsShown"), TRUE, FALSE, TRUE));
+        m_options.push_back(TOption(&compare.ignoreTransparent, TEXT("CompareOptions"), TEXT("IgnoreTransparent"), FALSE, FALSE, TRUE));
 
         m_options.push_back(TOption(&defect.checkOnDefect, TEXT("DefectOptions"), TEXT("CheckOnDefect"), TRUE, FALSE, TRUE));
         m_options.push_back(TOption(&defect.checkOnBlockiness, TEXT("DefectOptions"), TEXT("CheckOnBlockiness"), FALSE, FALSE, TRUE));

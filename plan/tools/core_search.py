@@ -46,8 +46,10 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
 --paths     prints each image's full path instead of its file name
 --max-size N  the largest side searched, in pixels (the core's default
             8196 leaves taller images out; the user's settings say 99999)
---alpha-ignored  turns off "Compare transparent images as they are shown":
-            the colour under transparent pixels counts, as before the option
+--alpha-ignored  turns off "Improve transparent image comparison": the
+            colour under transparent pixels counts, as before the option
+--ignore-transparent  turns on "Ignore areas with transparency in both
+            images" (off in a fresh engine; needs the option above on)
 --tsv FILE  also writes the pairs to FILE in UTF-8: difference, transform,
             first and second path (the printed names lose what isn't ASCII)
 --drop-same-name  takes the pairs whose two files have the same name,
@@ -114,7 +116,7 @@ def read_compare_options(core, h):
     flag moves. Also the buffer they are a view of: adOptionsSet gets the
     buffer, so fields this script doesn't know keep the values the engine
     gave."""
-    buf = (ctypes.c_byte * 64)()  # room for every layout
+    buf = (ctypes.c_byte * 128)()  # room for every layout, the core writes the whole struct
     core.adOptionsGet(h, AD_OPTIONS_COMPARE, buf)
     for cls in DOUBLE_LAYOUTS + INT_LAYOUTS:
         options = cls.from_buffer(buf)
@@ -229,6 +231,7 @@ def main():
     ap.add_argument("--tsv")
     ap.add_argument("--max-size", type=int)
     ap.add_argument("--alpha-ignored", action="store_true")
+    ap.add_argument("--ignore-transparent", action="store_true")
     ap.add_argument("--drop-same-name", action="store_true")
     ap.add_argument("--save-results")
     a = ap.parse_args()
@@ -285,8 +288,9 @@ def main():
                 sys.exit("this build has no shifted search")
             cmp_.shiftedImage = 1
         # The hard link flag comes after the algorithm, or after the working
-        # size in builds with one; the transparency flag after it. Both are on
-        # in a fresh engine of a build that has them.
+        # size in builds with one; the transparency flag after it, both on in
+        # a fresh engine of a build that has them; then the flag for ignoring
+        # transparent areas, off (a build without it has no check here).
         hardlinks = 56 if ctypes.c_int32.from_buffer(cmp_buf, 52).value in BUTTERAUGLI_SIZES else 52
         if a.compare_hardlinks:
             flag = ctypes.c_int32.from_buffer(cmp_buf, hardlinks)
@@ -298,6 +302,8 @@ def main():
             if flag.value != 1:
                 sys.exit("this build has no transparency option")
             flag.value = 0
+        if a.ignore_transparent:
+            ctypes.c_int32.from_buffer(cmp_buf, hardlinks + 8).value = 1
         if a.butteraugli_size is not None:
             size = ctypes.c_int32.from_buffer(cmp_buf, BUTTERAUGLI_SIZE_OFFSET)
             if not isinstance(cmp_, DOUBLE_LAYOUTS) or size.value not in BUTTERAUGLI_SIZES:

@@ -55,6 +55,13 @@ namespace ad
         // (b, a, inverse of t).
         double Score(TImageDataPtr pFirst, TImageDataPtr pSecond, adTransformType transform, const TBackground & background);
 
+        // The same with transparent areas ignored (adCompareOptions::
+        // ignoreTransparent): the two at the size of the one with fewer
+        // pixels, each laid over the other, so that where one is
+        // transparent both show the same, and where both are, white. Not
+        // kept in the scores' file.
+        double MaskedScore(TImageDataPtr pFirst, TImageDataPtr pSecond, adTransformType transform);
+
         // Whether this search wants every image's keypoints, which takes
         // decoding the images the image database would otherwise spare.
         bool NeedsKeypoints() const { return m_pIndex != NULL; }
