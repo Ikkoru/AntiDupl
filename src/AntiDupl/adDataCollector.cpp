@@ -248,7 +248,7 @@ namespace ad
     // Whether a four-channel image has transparent pixels: some alpha under
     // 255, but not every alpha 0, which is how a 32-bit BMP with an unused
     // fourth byte decodes, and would otherwise show nothing at all.
-    static bool HasTransparency(const TView & view)
+    bool HasTransparency(const TView & view)
     {
         if (view.format != TView::Bgra32 && view.format != TView::Rgba32)
             return false;
@@ -267,7 +267,7 @@ namespace ad
 
     // The image laid over a background of one grey level (0 or 255), as a
     // viewer shows it: same channel order, every pixel opaque.
-    static void LayOver(const TView & view, int background, TView & shown)
+    void LayOver(const TView & view, int background, TView & shown)
     {
         shown.Recreate(view.width, view.height, view.format);
         for (size_t y = 0; y < view.height; ++y)

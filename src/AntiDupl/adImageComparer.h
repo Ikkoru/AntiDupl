@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "adConfig.h"
+#include "adPixelData.h"
 
 namespace ad
 {
@@ -88,6 +89,13 @@ namespace ad
         // every set.
         bool m_asShown;
         Set m_alphaSet;
+        // For a comparer that looks at the images themselves, not their
+        // thumbnails (Butteraugli): the pair IsDuplPair gets may be stand-ins
+        // made of other thumbnails (an image over black, or filled with a
+        // colour). These say, for each call, which image of the sets the
+        // second stands for, and what both are laid over.
+        TImageDataPtr m_pSecondShown;
+        TBackground m_background;
 
     private:
         //Comparison of an image pair without shift and (if enabled) with shift compensation; the smaller difference is kept.
@@ -100,6 +108,7 @@ namespace ad
         bool IsDuplPairShown(TImageDataPtr pFirst, TImageDataPtr pFirstBlack, TImageDataPtr pSecond, double *pDifference);
         bool OverBoth(TImageDataPtr pFirst, TImageDataPtr pFirstBlack, TImageDataPtr pSecond, TImageDataPtr pSecondBlack, double *pDifference);
         bool UniformFill(TImageDataPtr pAlpha, TImageDataPtr pAlphaBlack, TImageDataPtr pOpaque, TUInt8 *bgr);
+        void SetFill(const TUInt8 *bgr);
         void MakeBlack(TImageData *pBlack, TImageDataPtr pImageData);
         void MakeFilled(TImageData *pFilled, TImageDataPtr pImageData, TImageDataPtr pBlack, const TUInt8 *bgr);
         void CopyInfo(TImageData *pTo, TImageDataPtr pFrom);

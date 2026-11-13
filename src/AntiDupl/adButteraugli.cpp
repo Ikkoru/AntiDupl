@@ -211,18 +211,54 @@ namespace ad
             Save();
     }
 
-    double TButteraugliStore::Score(TImageDataPtr pFirst, TImageDataPtr pSecond, adTransformType transform)
+    size_t TButteraugliStore::TWorkImage::Bytes() const
+    {
+        return (bgr ? bgr->stride * bgr->height : 0) + (bgrBlack ? bgrBlack->stride * bgrBlack->height : 0);
+    }
+
+    // A pair's key. The last field holds the score kind (version) and, in
+    // its second byte, the background (TBackground::TKind): a score of an
+    // image with transparency over white is not the same as over black, or
+    // with the colour under it counted. A fill colour's score isn't kept.
+    TButteraugliStore::TKey TButteraugliStore::Key(TImageDataPtr pFirst, TImageDataPtr pSecond, adTransformType transform,
+        TInt32 version, const TBackground & background) const
+    {
+        TKey key = { pFirst->size, pSecond->size, pFirst->crc32c, pSecond->crc32c, transform,
+            m_pOptions->compare.butteraugliSize, m_pOptions->advanced.ignoreFrameWidth, version | (TInt32(background.kind) << 8) };
+        return key;
+    }
+
+    // The image over the background: an image without transparency is the
+    // same over any; over colour c a pixel is black + (white - black) * c / 255.
+    const TView & TButteraugliStore::Shown(const TWorkImage & image, const TBackground & background, TView & blend)
+    {
+        if (!image.bgrBlack || background.kind == TBackground::AS_STORED || background.kind == TBackground::WHITE)
+            return *image.bgr;
+        if (background.kind == TBackground::BLACK)
+            return *image.bgrBlack;
+        const TView & white = *image.bgr, & black = *image.bgrBlack;
+        blend.Recreate(white.width, white.height, TView::Bgr24);
+        for (size_t y = 0; y < white.height; ++y)
+        {
+            const TUInt8 * w = white.data + y * white.stride, * b = black.data + y * black.stride;
+            TUInt8 * q = blend.data + y * blend.stride;
+            for (size_t x = 0; x < 3 * white.width; ++x)
+                q[x] = TUInt8(b[x] + ((int(w[x]) - b[x]) * background.bgr[x % 3] + 127) / 255);
+        }
+        return blend;
+    }
+
+    double TButteraugliStore::Score(TImageDataPtr pFirst, TImageDataPtr pSecond, adTransformType transform, const TBackground & background)
     {
         if (Before(pSecond, pFirst))
         {
             std::swap(pFirst, pSecond);
             transform = Inverse(transform);
         }
-        TKey key = { pFirst->size, pSecond->size, pFirst->crc32c, pSecond->crc32c, transform,
-            m_pOptions->compare.butteraugliSize, m_pOptions->advanced.ignoreFrameWidth, 0 };
+        const TKey key = Key(pFirst, pSecond, transform, 0, background);
         // 0 is a CRC not computed, and -1 one the file couldn't be read for.
         const bool keyed = pFirst->crc32c != 0 && pFirst->crc32c != TUInt32(-1) &&
-            pSecond->crc32c != 0 && pSecond->crc32c != TUInt32(-1);
+            pSecond->crc32c != 0 && pSecond->crc32c != TUInt32(-1) && background.kind != TBackground::FILL;
         if (keyed)
         {
             std::lock_guard<std::mutex> lock(m_mutex);
@@ -234,7 +270,8 @@ namespace ad
         TWorkImagePtr first = Image(pFirst), second = Image(pSecond);
         if (!first->bgr || !second->bgr)
             return -1;
-        const double score = Compute(*first->bgr, *second->bgr, transform);
+        TView firstBlend, secondBlend;
+        const double score = Compute(Shown(*first, background, firstBlend), Shown(*second, background, secondBlend), transform);
 
         if (keyed && score >= 0)
         {
@@ -284,14 +321,13 @@ namespace ad
         return t;
     }
 
-    double TButteraugliStore::AlignedScore(TImageDataPtr pFirst, TImageDataPtr pSecond)
+    double TButteraugliStore::AlignedScore(TImageDataPtr pFirst, TImageDataPtr pSecond, const TBackground & background)
     {
         if (Before(pSecond, pFirst))
             std::swap(pFirst, pSecond);
-        TKey key = { pFirst->size, pSecond->size, pFirst->crc32c, pSecond->crc32c, AD_TRANSFORM_TURN_0,
-            m_pOptions->compare.butteraugliSize, m_pOptions->advanced.ignoreFrameWidth, ALIGNED_SCORE_VERSION };
+        const TKey key = Key(pFirst, pSecond, AD_TRANSFORM_TURN_0, ALIGNED_SCORE_VERSION, background);
         const bool keyed = pFirst->crc32c != 0 && pFirst->crc32c != TUInt32(-1) &&
-            pSecond->crc32c != 0 && pSecond->crc32c != TUInt32(-1);
+            pSecond->crc32c != 0 && pSecond->crc32c != TUInt32(-1) && background.kind != TBackground::FILL;
         if (keyed)
         {
             std::lock_guard<std::mutex> lock(m_mutex);
@@ -313,7 +349,8 @@ namespace ad
         TWorkImagePtr first = Image(pFirst), second = Image(pSecond);
         if (!first->bgr || !second->bgr)
             return -1;
-        const double score = ComputeAligned(*first->bgr, *second->bgr,
+        TView firstBlend, secondBlend;
+        const double score = ComputeAligned(Shown(*first, background, firstBlend), Shown(*second, background, secondBlend),
             Rescale(a.width, a.height, first->bgr->width, first->bgr->height).After(transform).After(
                 Rescale(second->bgr->width, second->bgr->height, b.width, b.height)));
 
@@ -353,7 +390,7 @@ namespace ad
         if (image->bgr && !image->counted && it != m_images.end() && it->second.image == image)
         {
             image->counted = true;
-            m_imageBytes += image->bgr->stride * image->bgr->height;
+            m_imageBytes += image->Bytes();
         }
         // The two images of the pair being scored stay; the shared pointers
         // keep an evicted image alive while a thread still scores with it.
@@ -361,7 +398,7 @@ namespace ad
         {
             auto victim = m_images.find(m_uses.back());
             if (victim->second.image->counted)
-                m_imageBytes -= victim->second.image->bgr->stride * victim->second.image->bgr->height;
+                m_imageBytes -= victim->second.image->Bytes();
             m_images.erase(victim);
             m_uses.pop_back();
         }
@@ -378,6 +415,25 @@ namespace ad
             view.format != TView::Bgr24 && view.format != TView::Gray8)
             return;
 
+        // With transparency shown, an image with transparent pixels is laid
+        // over white and over black at full size, before it is reduced: the
+        // colour under a transparent pixel would otherwise bleed into the
+        // reduced picture's edges.
+        if (m_pOptions->compare.transparentAsShown == TRUE && HasTransparency(view))
+        {
+            TView white, black;
+            LayOver(view, 0xFF, white);
+            LayOver(view, 0, black);
+            image.bgr = ToWorkImage(white);
+            image.bgrBlack = ToWorkImage(black);
+        }
+        else
+            image.bgr = ToWorkImage(view);
+    }
+
+    // The picture at the working size, as B, G, R bytes.
+    std::unique_ptr<TView> TButteraugliStore::ToWorkImage(const TView & view) const
+    {
         size_t w = view.width, h = view.height;
         const size_t side = (size_t)m_pOptions->compare.butteraugliSize;
         TView reduced;
@@ -392,8 +448,8 @@ namespace ad
             pSrc = &reduced;
         }
 
-        image.bgr.reset(new TView(w, h, TView::Bgr24));
-        TView & bgr = *image.bgr;
+        std::unique_ptr<TView> work(new TView(w, h, TView::Bgr24));
+        TView & bgr = *work;
         const TView & src = *pSrc;
         switch (src.format)
         {
@@ -413,6 +469,7 @@ namespace ad
             SimdGrayToBgr(src.data, w, h, src.stride, bgr.data, bgr.stride);
             break;
         }
+        return work;
     }
 
     // Both images at the size of the one with fewer pixels, the other one

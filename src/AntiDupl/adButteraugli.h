@@ -29,6 +29,7 @@
 
 #include "adAlign.h"
 #include "adConfig.h"
+#include "adPixelData.h"
 #include "adStrings.h"
 
 namespace ad
@@ -52,7 +53,7 @@ namespace ad
         // TImageComparer::Accept turns its reduced images; negative when
         // either file can't be decoded. The same for (a, b, t) and
         // (b, a, inverse of t).
-        double Score(TImageDataPtr pFirst, TImageDataPtr pSecond, adTransformType transform);
+        double Score(TImageDataPtr pFirst, TImageDataPtr pSecond, adTransformType transform, const TBackground & background);
 
         // Whether this search wants every image's keypoints, which takes
         // decoding the images the image database would otherwise spare.
@@ -68,15 +69,20 @@ namespace ad
         // Butteraugli's score for what the two images show in common, each
         // laid over the other; negative when they don't align, share too
         // little, or differ too much there for a score to be worth its time.
-        double AlignedScore(TImageDataPtr pFirst, TImageDataPtr pSecond);
+        double AlignedScore(TImageDataPtr pFirst, TImageDataPtr pSecond, const TBackground & background);
 
     private:
-        // B, G, R bytes, the longest side at most the working size.
+        // B, G, R bytes, the longest side at most the working size. An image
+        // with transparency, when it is shown, is kept laid over white in bgr
+        // and over black in bgrBlack; any other background is a blend of the
+        // two (Shown).
         struct TWorkImage
         {
             std::once_flag decoded;
             std::unique_ptr<TView> bgr; // NULL when the file didn't decode
+            std::unique_ptr<TView> bgrBlack; // NULL without transparency
             bool counted = false; // its bytes are in m_imageBytes
+            size_t Bytes() const;
         };
         typedef std::shared_ptr<TWorkImage> TWorkImagePtr;
         struct TCached
@@ -100,7 +106,10 @@ namespace ad
         };
 
         TWorkImagePtr Image(TImageDataPtr pImageData);
+        static const TView & Shown(const TWorkImage & image, const TBackground & background, TView & blend);
+        TKey Key(TImageDataPtr pFirst, TImageDataPtr pSecond, adTransformType transform, TInt32 version, const TBackground & background) const;
         void Decode(TImageDataPtr pImageData, TWorkImage & image) const;
+        std::unique_ptr<TView> ToWorkImage(const TView & view) const;
         double Compute(const TView & first, const TView & second, adTransformType transform) const;
         double ComputeAligned(const TView & first, const TView & second, const TAffine & transform) const;
         std::shared_ptr<const TKeypoints> Keypoints(TImageDataPtr pImageData);

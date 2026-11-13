@@ -44,6 +44,10 @@ namespace ad
     double ComputeBlockiness(const TView & gray);
     // Area-averaged resize of byte channels, the same format in and out.
     void AreaResize(const TView & src, TView & dst);
+    // Whether a four-channel image has transparent pixels (not all alpha 0).
+    bool HasTransparency(const TView & view);
+    // A four-channel image laid over one grey level, every pixel opaque.
+    void LayOver(const TView & view, int background, TView & shown);
     //-------------------------------------------------------------------------
     class TDataCollector
     {
