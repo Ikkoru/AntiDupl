@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Runs a build's pair preview highlight on pairs with transparency
+       (Program.cs). Build with -p:AntiDuplBin=<checkout>\bin\Release, a
+       comma in the path written %2C (MSBuild splits properties at commas);
+       add -p:DefineConstants=PERCEPTUAL for the perceptual highlight. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows7.0</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <NoWarn>CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="AntiDupl.NET.WinForms">
+      <HintPath>$(AntiDuplBin)\AntiDupl.NET.WinForms.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="AntiDupl.NET.Core">
+      <HintPath>$(AntiDuplBin)\AntiDupl.NET.Core.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
