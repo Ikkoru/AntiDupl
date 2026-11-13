@@ -552,51 +552,61 @@ namespace AntiDupl.NET.WinForms
             return false;
         }
 
-        public ComparableBitmap[] GetImageFragments()
+        /// <summary>The shown picture, or null.</summary>
+        public Bitmap GetBitmap()
         {
-            int amountOfFragments = m_options.resultsOptions.AmountOfFragmentsOnX * m_options.resultsOptions.AmountOfFragmentsOnY;
+            return m_pictureBoxPanel.Bitmap;
+        }
 
-            Bitmap bitmap = m_pictureBoxPanel.Bitmap;
-            if (bitmap != null && m_options.resultsOptions.NormalizedSizeOfImage > 16)
+        /// <summary>
+        /// A picture resized to the normalized size the highlighted
+        /// differences are found on, or null.
+        /// </summary>
+        public static Bitmap Normalize(Bitmap bitmap, ResultsOptions options)
+        {
+            if (bitmap != null && options.NormalizedSizeOfImage > 16)
             {
-                Size smallSize = new Size(m_options.resultsOptions.NormalizedSizeOfImage, m_options.resultsOptions.NormalizedSizeOfImage);
-                bitmap = ResizeImage(bitmap, smallSize);
-
-                if (bitmap != null)
-                {
-                    ComparableBitmap[] fragments = new ComparableBitmap[amountOfFragments];
-                    int widthOfFragment = bitmap.Width / m_options.resultsOptions.AmountOfFragmentsOnX;
-                    int heightOfFragment = bitmap.Height / m_options.resultsOptions.AmountOfFragmentsOnX;
-
-                    for (int i = 0, x = 0, y = 0; i < amountOfFragments; i++)
-                    {
-                        Rectangle rectangle = new Rectangle(x, y, widthOfFragment, heightOfFragment);
-                        fragments[i] = new ComparableBitmap(bitmap, rectangle);
-
-                        x += widthOfFragment;
-                        if (x >= bitmap.Width)
-                        {
-                            x = 0;
-                            y = y + heightOfFragment;
-                        }
-                    }
-
-                    return fragments;
-                }
+                Size smallSize = new Size(options.NormalizedSizeOfImage, options.NormalizedSizeOfImage);
+                return ResizeImage(bitmap, smallSize);
             }
-
             return null;
         }
 
         /// <summary>
-        /// The shown picture's pixels as B, G, R, A bytes, a copy a background
-        /// thread may read while the panel moves on to another picture; null
-        /// when nothing is shown.
+        /// A normalized picture (Normalize) cut into the fragments
+        /// the highlighted differences are found in.
         /// </summary>
-        public byte[] GetPixels(out int width, out int height)
+        public static ComparableBitmap[] GetImageFragments(Bitmap bitmap, ResultsOptions options)
+        {
+            int amountOfFragments = options.AmountOfFragmentsOnX * options.AmountOfFragmentsOnY;
+            ComparableBitmap[] fragments = new ComparableBitmap[amountOfFragments];
+            int widthOfFragment = bitmap.Width / options.AmountOfFragmentsOnX;
+            int heightOfFragment = bitmap.Height / options.AmountOfFragmentsOnX;
+
+            for (int i = 0, x = 0, y = 0; i < amountOfFragments; i++)
+            {
+                Rectangle rectangle = new Rectangle(x, y, widthOfFragment, heightOfFragment);
+                fragments[i] = new ComparableBitmap(bitmap, rectangle);
+
+                x += widthOfFragment;
+                if (x >= bitmap.Width)
+                {
+                    x = 0;
+                    y = y + heightOfFragment;
+                }
+            }
+
+            return fragments;
+        }
+
+        /// <summary>
+        /// A picture's pixels as B, G, R, A bytes, a copy a background thread
+        /// may read while the panel moves on to another picture; null when
+        /// there is no picture.
+        /// </summary>
+        public static byte[] GetPixels(Bitmap bitmap, out int width, out int height)
         {
             width = height = 0;
-            Bitmap bitmap = m_pictureBoxPanel.Bitmap;
             if (bitmap == null)
                 return null;
             width = bitmap.Width;

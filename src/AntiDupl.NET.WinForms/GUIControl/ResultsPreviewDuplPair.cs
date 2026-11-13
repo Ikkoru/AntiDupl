@@ -320,20 +320,21 @@ namespace AntiDupl.NET.WinForms
                 m_threadPerceptual = m_options.resultsOptions.IgnoreCompressionNoise;
                 if (m_threadPerceptual)
                 {
-                    int w1, h1, w2, h2;
-                    byte[] pixels1 = m_firstImagePreviewPanel.GetPixels(out w1, out h1);
-                    byte[] pixels2 = m_secondImagePreviewPanel.GetPixels(out w2, out h2);
+                    List<PixelPair> pairs = GetPixelPairs(m_firstImagePreviewPanel.GetBitmap(),
+                        m_secondImagePreviewPanel.GetBitmap(), m_coreOptions.compareOptions.transparentAsShown);
                     int generation = m_highlightGeneration;
                     _thread = new Thread(
-                         unused => CalculatePerceptualDifferences(generation, pixels1, w1, h1, pixels2, w2, h2));
+                         unused => CalculatePerceptualDifferences(generation, pairs));
                     _thread.Name = "Calculate rectangles of differences";
                     _thread.IsBackground = true;
                     _thread.Start();
                     return;
                 }
                 HighlightCompleteEvent += new HighlightCompleteDelegate(HighlightCompleteEventHandler);
-                ComparableBitmap[] bitmap1 = m_firstImagePreviewPanel.GetImageFragments();
-                ComparableBitmap[] bitmap2 = m_secondImagePreviewPanel.GetImageFragments();
+                List<ComparableBitmap[]> bitmap1 = new List<ComparableBitmap[]>();
+                List<ComparableBitmap[]> bitmap2 = new List<ComparableBitmap[]>();
+                GetFragments(m_firstImagePreviewPanel.GetBitmap(), m_secondImagePreviewPanel.GetBitmap(),
+                    m_options.resultsOptions, m_coreOptions.compareOptions.transparentAsShown, bitmap1, bitmap2);
                 _thread = new Thread(
                      unused => CalculateRectanglesOfDifferences(bitmap1, bitmap2));
                 _thread.Name = "Calculate rectangles of differences";
@@ -356,9 +357,8 @@ namespace AntiDupl.NET.WinForms
         // The fragments, on the same grid as GetImageFragments, where the
         // map's largest value exceeds the threshold; the rest as for the grey
         // comparison (the limits on how many). Empty when there are too many.
-        private List<Rectangle> MarkedFragments(float[] map, Size mapSize)
+        private static List<Rectangle> MarkedFragments(ResultsOptions options, float[] map, Size mapSize)
         {
-            ResultsOptions options = m_options.resultsOptions;
             int size = options.NormalizedSizeOfImage, columns = options.AmountOfFragmentsOnX, rows = options.AmountOfFragmentsOnY;
             int mapWidth = mapSize.Width, mapHeight = mapSize.Height;
             List<RectanglesWithSimilarity> rectangles = new List<RectanglesWithSimilarity>();
@@ -389,33 +389,100 @@ namespace AntiDupl.NET.WinForms
             return chosen;
         }
 
+        // A pair's two pictures as B, G, R, A bytes, copies a background
+        // thread may read while the panels move on to another pair.
+        public class PixelPair
+        {
+            public byte[] First, Second;
+            public int FirstWidth, FirstHeight, SecondWidth, SecondHeight;
+        }
+
+        // The pictures as shown: one pair, or with the transparency option
+        // one per background they are laid over (TransparentPair.Shown), at
+        // full size. The core's difference maps read no alpha.
+        public static List<PixelPair> GetPixelPairs(Bitmap first, Bitmap second, bool transparentAsShown)
+        {
+            List<PixelPair> pairs = new List<PixelPair>();
+            if (first == null || second == null)
+                return pairs;
+            List<Bitmap[]> shown = transparentAsShown ? TransparentPair.Shown(first, second, bitmap => bitmap) :
+                new List<Bitmap[]> { new Bitmap[] { first, second } };
+            foreach (Bitmap[] pictures in shown)
+            {
+                PixelPair pair = new PixelPair();
+                pair.First = ImagePreviewPanel.GetPixels(pictures[0], out pair.FirstWidth, out pair.FirstHeight);
+                pair.Second = ImagePreviewPanel.GetPixels(pictures[1], out pair.SecondWidth, out pair.SecondHeight);
+                pairs.Add(pair);
+            }
+            return pairs;
+        }
+
+        // Each value the larger of the two maps' (the first when there is no
+        // second yet).
+        private static float[] Largest(float[] map, float[] other)
+        {
+            if (map == null)
+                return other;
+            for (int i = 0; i < map.Length; i++)
+                map[i] = Math.Max(map[i], other[i]);
+            return map;
+        }
+
         // Laid over each other first, so that a shift or a crop isn't taken
         // for a difference: then a fragment of one is not the same fragment of
         // the other, and each picture gets its own. A pair that doesn't align,
-        // or needs no aligning, gets one map for both.
-        private void CalculatePerceptualDifferences(int generation, byte[] pixels1, int width1, int height1,
-            byte[] pixels2, int width2, int height2)
+        // or needs no aligning, gets one map for both. Pictures shown over
+        // several backgrounds get a map over each, and a point differs by the
+        // most it does over any; one background that doesn't align makes
+        // plain maps of all. False when there is nothing to compare.
+        public static bool PerceptualFragments(CoreLib core, ResultsOptions options, List<PixelPair> pairs,
+            out List<Rectangle> chosen1, out List<Rectangle> chosen2)
         {
-            ResultsOptions options = m_options.resultsOptions;
-            if (pixels1 == null || pixels2 == null || options.NormalizedSizeOfImage <= 16 ||
+            chosen1 = chosen2 = null;
+            if (pairs.Count == 0 || options.NormalizedSizeOfImage <= 16 ||
                 options.AmountOfFragmentsOnX <= 0 || options.AmountOfFragmentsOnY <= 0)
-                return;
-            Size size1 = DifferenceMapSize(width1, height1), size2 = DifferenceMapSize(width2, height2);
+                return false;
+            Size size1 = DifferenceMapSize(pairs[0].FirstWidth, pairs[0].FirstHeight);
+            Size size2 = DifferenceMapSize(pairs[0].SecondWidth, pairs[0].SecondHeight);
+            float[] map1 = null, map2 = null;
+            bool aligned = true;
+            foreach (PixelPair pair in pairs)
+            {
+                float[] pairMap1, pairMap2;
+                if (!core.AlignedDifferenceMaps(pair.First, pair.FirstWidth, pair.FirstHeight,
+                    pair.Second, pair.SecondWidth, pair.SecondHeight,
+                    size1.Width, size1.Height, size2.Width, size2.Height, out pairMap1, out pairMap2))
+                {
+                    aligned = false;
+                    break;
+                }
+                map1 = Largest(map1, pairMap1);
+                map2 = Largest(map2, pairMap2);
+            }
+            if (aligned)
+            {
+                chosen1 = MarkedFragments(options, map1, size1);
+                chosen2 = MarkedFragments(options, map2, size2);
+                return true;
+            }
+            map1 = null;
+            foreach (PixelPair pair in pairs)
+            {
+                float[] pairMap = core.DifferenceMap(pair.First, pair.FirstWidth, pair.FirstHeight,
+                    pair.Second, pair.SecondWidth, pair.SecondHeight, size1.Width, size1.Height);
+                if (pairMap == null)
+                    return false;
+                map1 = Largest(map1, pairMap);
+            }
+            chosen1 = chosen2 = MarkedFragments(options, map1, size1);
+            return true;
+        }
+
+        private void CalculatePerceptualDifferences(int generation, List<PixelPair> pairs)
+        {
             List<Rectangle> chosen1, chosen2;
-            float[] map1, map2;
-            if (m_core.AlignedDifferenceMaps(pixels1, width1, height1, pixels2, width2, height2,
-                size1.Width, size1.Height, size2.Width, size2.Height, out map1, out map2))
-            {
-                chosen1 = MarkedFragments(map1, size1);
-                chosen2 = MarkedFragments(map2, size2);
-            }
-            else
-            {
-                map1 = m_core.DifferenceMap(pixels1, width1, height1, pixels2, width2, height2, size1.Width, size1.Height);
-                if (map1 == null)
-                    return;
-                chosen1 = chosen2 = MarkedFragments(map1, size1);
-            }
+            if (!PerceptualFragments(m_core, m_options.resultsOptions, pairs, out chosen1, out chosen2))
+                return;
             if (chosen1.Count == 0 && chosen2.Count == 0)
                 return;
             try
@@ -433,21 +500,60 @@ namespace AntiDupl.NET.WinForms
             }
         }
 
-        private void CalculateRectanglesOfDifferences(ComparableBitmap[] bitmap1, ComparableBitmap[] bitmap2)
+        /// <summary>
+        /// The fragments of a pair's pictures to compare: one set each, or
+        /// with the transparency option one set per background the pictures
+        /// are laid over (TransparentPair.Shown), like the search. None when
+        /// a picture is missing or the normalized size too small.
+        /// </summary>
+        public static void GetFragments(Bitmap first, Bitmap second, ResultsOptions options, bool transparentAsShown,
+            List<ComparableBitmap[]> firstFragments, List<ComparableBitmap[]> secondFragments)
         {
-            if ((bitmap1 == null) || (bitmap2 == null))
+            if (first == null || second == null)
+                return;
+            Func<Bitmap, Bitmap> normalize = bitmap => ImagePreviewPanel.Normalize(bitmap, options);
+            List<Bitmap[]> pairs = transparentAsShown ? TransparentPair.Shown(first, second, normalize) :
+                new List<Bitmap[]> { new Bitmap[] { normalize(first), normalize(second) } };
+            foreach (Bitmap[] pair in pairs)
+            {
+                if (pair[0] == null || pair[1] == null)
+                {
+                    firstFragments.Clear();
+                    secondFragments.Clear();
+                    return;
+                }
+                firstFragments.Add(ImagePreviewPanel.GetImageFragments(pair[0], options));
+                secondFragments.Add(ImagePreviewPanel.GetImageFragments(pair[1], options));
+            }
+        }
+
+        /// <summary>
+        /// The similarity of fragment i: the least over the sets, as the
+        /// search takes the larger difference over white and over black.
+        /// </summary>
+        public static float Similarity(List<ComparableBitmap[]> first, List<ComparableBitmap[]> second, int i)
+        {
+            float similarity = float.MaxValue;
+            for (int set = 0; set < first.Count; set++)
+                similarity = Math.Min(similarity, Comparator.Similarity(first[set][i].GrayscaleData, second[set][i].GrayscaleData));
+            return similarity;
+        }
+
+        private void CalculateRectanglesOfDifferences(List<ComparableBitmap[]> bitmap1, List<ComparableBitmap[]> bitmap2)
+        {
+            if (bitmap1.Count == 0 || bitmap2.Count == 0)
                 return;
 
             List<RectanglesWithSimilarity> rectangles = new List<RectanglesWithSimilarity>();
             float similarity;
-            for (int i = 0; i < bitmap1.Length; i++)
+            for (int i = 0; i < bitmap1[0].Length; i++)
             {
                 if (_highlightStop)
                     return;
-                similarity = Comparator.Similarity(bitmap1[i].GrayscaleData, bitmap2[i].GrayscaleData);
+                similarity = Similarity(bitmap1, bitmap2, i);
                 if (similarity < m_options.resultsOptions.DifferenceThreshold)
                 {
-                    rectangles.Add(new RectanglesWithSimilarity(bitmap1[i].Rect, similarity));
+                    rectangles.Add(new RectanglesWithSimilarity(bitmap1[0][i].Rect, similarity));
                 }
             }
 
