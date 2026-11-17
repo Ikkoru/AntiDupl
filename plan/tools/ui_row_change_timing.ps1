@@ -7,7 +7,8 @@
 # key handled, the preview loaded and everything repainted). Prints the
 # median and mean milliseconds per row change, per view; -Raw also every
 # time, -Highlight turns on the highlighted differences, -ColorMode Dark
-# (Classic, System) sets the theme of builds that have one.
+# (Classic, System) sets the theme of builds that have one, and
+# -Set "Name=value;..." any other element of options.xml.
 # Compare builds on a list whose rows all cost the same (one picture copied
 # several times): builds that sort differently put other pictures on the
 # rows timed, and a picture's size alone moves a row change from tens to
@@ -16,7 +17,7 @@
 # Works with builds back to v2.3.13: nothing it uses is newer. Compare
 # builds on the same folders, one after another, nothing else running.
 param([string]$Exe, [string]$s, [string[]]$Folder, [int]$Steps = 20, [int]$Threshold = 5,
-      [string[]]$Views = @('VerticalPairTable', 'HorizontalPairTable'), [switch]$Raw, [switch]$Highlight, [string]$ColorMode)
+      [string[]]$Views = @('VerticalPairTable', 'HorizontalPairTable'), [switch]$Raw, [switch]$Highlight, [string]$ColorMode, [string]$Set)
 . (Join-Path $PSScriptRoot 'ui_automation.ps1')
 # pwsh -File passes "a,b" as one string: folders may also be given as "a;b".
 $Folder = @($Folder | ForEach-Object { $_ -split '[;,]' } | Where-Object { $_ })
@@ -82,6 +83,10 @@ try {
         Set-Xml $options @{ viewMode = $view; HighlightDifference = "$([bool]$Highlight)".ToLower() }
         # Builds without a dark mode have no colorMode.
         if ($ColorMode) { Set-Xml $options @{ colorMode = $ColorMode } }
+        foreach ($pair in ($Set -split ';' | Where-Object { $_ })) {
+            $k, $v = $pair -split '=', 2
+            Set-Xml $options @{ $k = $v }
+        }
         $p, $main = Start-AdBuild $Exe $s
         Expand-AdWindow $main
         Start-Sleep -Seconds 2
