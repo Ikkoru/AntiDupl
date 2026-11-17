@@ -55,6 +55,11 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
 --drop-same-name  takes the pairs whose two files have the same name,
             extension aside, out of the results (printed, written and saved);
             a DeviantArt download name counts as the archive's (name_key)
+--drop-pairs TSV  takes the pairs of another run's --tsv file out of the
+            results, in either order (printed, written and saved): what a
+            looser search adds to a stricter one
+--min-size N  the smallest side searched, in pixels (the core's default
+            leaves small images out; the user's settings say 1)
 --save-results FILE  saves the result list as an AntiDupl results file
             (.adr): saved as <profile>.adr in the profiles folder of a
             scratch settings folder, a build started with -s on that folder
@@ -187,24 +192,44 @@ def same_name(r):
     return r.type == AD_RESULT_DUPL_IMAGE_PAIR and name_key(r.first.path) == name_key(r.second.path)
 
 
-def drop_same_name(core, h, results):
-    """Takes the pairs whose files share a name (extension aside) out of the
-    result list, through the core's Mistake action on them as a selection:
-    the list then saves as the GUI would leave it. The action only adds them
-    to the engine's mistake list, which this script never saves; it touches
-    no file."""
+def drop_results(core, h, results, test, what):
+    """Takes the results `test` picks out of the result list, through the
+    core's Mistake action on them as a selection: the list then saves as the
+    GUI would leave it. The action only adds them to the engine's mistake
+    list, which this script never saves; it touches no file."""
     core.adSelectionSet.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_size_t, ctypes.c_int32]
     core.adResultApplyTo.argtypes = [ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32]
     assert core.adSelectionSet(h, ctypes.byref(ctypes.c_size_t(0)), len(results), 0) == 0
-    marked = [i for i, r in enumerate(results) if same_name(r)]
+    marked = [i for i, r in enumerate(results) if test(r)]
     for i in marked:
         assert core.adSelectionSet(h, ctypes.byref(ctypes.c_size_t(i)), 1, 1) == 0
     if marked:
         assert core.adResultApplyTo(h, AD_LOCAL_ACTION_MISTAKE, AD_TARGET_SELECTED) == 0
     left = get_results(core, h)
-    if len(left) != len(results) - len(marked) or any(same_name(r) for r in left):
-        sys.exit("dropping the same-name pairs left the wrong results")
+    if len(left) != len(results) - len(marked) or any(test(r) for r in left):
+        sys.exit(f"dropping {what} left the wrong results")
     return left
+
+
+def drop_same_name(core, h, results):
+    """Takes the pairs whose files share a name (extension aside) out."""
+    return drop_results(core, h, results, same_name, "the same-name pairs")
+
+
+def read_pairs(tsv):
+    """The pairs of a --tsv file, each as a set of its two paths."""
+    with open(tsv, encoding="utf-8") as f:
+        next(f)
+        return {frozenset(os.path.normcase(p) for p in line.rstrip("\n").split("\t")[2:4]) for line in f}
+
+
+def drop_pairs(core, h, results, pairs):
+    """Takes out the pairs that are in `pairs` (read_pairs), whichever file
+    is first."""
+    def known(r):
+        return r.type == AD_RESULT_DUPL_IMAGE_PAIR and \
+            frozenset((os.path.normcase(r.first.path), os.path.normcase(r.second.path))) in pairs
+    return drop_results(core, h, results, known, "the known pairs")
 
 
 def main():
@@ -234,6 +259,8 @@ def main():
     ap.add_argument("--ignore-transparent", action="store_true")
     ap.add_argument("--drop-same-name", action="store_true")
     ap.add_argument("--save-results")
+    ap.add_argument("--drop-pairs")
+    ap.add_argument("--min-size", type=int)
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -283,6 +310,8 @@ def main():
             cmp_.ratioControl = 0
         if a.max_size is not None:
             cmp_.maximalImageSize = a.max_size
+        if a.min_size is not None:
+            cmp_.minimalImageSize = a.min_size
         if a.shifted:
             if not hasattr(cmp_, "shiftedImage"):
                 sys.exit("this build has no shifted search")
@@ -351,6 +380,8 @@ def main():
             results = get_results(core, h)
             if a.drop_same_name:
                 results = drop_same_name(core, h, results)
+            if a.drop_pairs:
+                results = drop_pairs(core, h, results, read_pairs(a.drop_pairs))
             if a.save_results:
                 err = core.adSaveW(h, AD_FILE_RESULT, os.path.abspath(a.save_results))
                 if err:
