@@ -42,19 +42,28 @@ Evidence and designs: [`plan/README.md`](plan/README.md) (read first). Every tas
   * Open: once `fix/transparency` and #280 are both upstream, the Butteraugli part goes to `feat/butteraugli` / `feat/aligned-search` (T36).
 - [ ] **T53 ⬆ The tool bar's algorithm list as wide as its longest name** (a maintainer's request on PR #280; the user said a PR is lined up): the personal branch has it (`CoreOptionsForm.AlgorithmListWidth`, used by `MainToolStrip`), upstream's list is a fixed 70 px. Ported to `fix/algorithm-list-width` (pushed, a separate PR rather than part of #280: upstream's own names are already cut today); PR description in the workspace's `reference\github-drafts\pr-algorithm-list-width.md`.
 - [ ] **T49 Copies that score high: low-quality JPEGs against their PNG originals** (user's test images, `jpg-png-copies\` in the workspace's test images folder, all five confirmed copies): Butteraugli at 768 px scores them 17 to 25 plain and 17 to 20 aligned, past both thresholds. Largely not the algorithm's fault: the PNGs are gallery-dl's rebuilds from DeviantArt crop windows, and its stitching pasted resampled windows 1.3–1.6 px off, leaving seams. *I could eat you* rebuilt with gallery-dl's fix scores 8.52 plain and 3.69 aligned (from 22.03 and 19.02). Once gallery-dl rebuilds the affected archive files, it sends their paths: re-score them with both searches into the workspace's `Research\real-runs\deviant-same-name\same-name-pairs.tsv`, then see what is left high. For what is left, find what drives the score (the JPEG's quality and chroma subsampling, the size ratio, resampling, alignment that improves but doesn't settle them) and whether the algorithm can tell this kind of loss from an edit, without pairing the study's versions.
+- [ ] **T54 Filter** that allows to filter out all results that don't contain what you specify in a column type within the entire row (name, folder, extension, etc.). Probably on the middle toolbar. Not sure what it should be like to use it (popup window is too much clicks T_T).
 
 ## P2 — Stretch goals (noted; not to be done unless asked)
 
 - [ ] **S1 "Delete but add metadata to other image".** Copy missing tags (incl. AI-generator prompts, settings, ComfyUI workflows) from the deleted file into the kept one with ExifTool; undo keeps working. Design and verified ExifTool commands → [05](plan/05-metadata-merge.md)
+
 - [ ] **S2 Built-in QuantSmooth pass** — user's specification, verbatim:
+
   > Built-in QuantSmooth pass before comparison of jpgs creating a temporary folder of QS outputs. All image operations should still affect the originals. All details/info should be that of the originals. When a decision is made about an image pair (delete/replace 1/2 or keep both) the temporary versions of those images should be deleted. QSed images that are not currently open in the program, and are more than a week old should be deleted.
-  
+
   Code pointers only (not researched) → [06 § S2](plan/06-stretch-and-ameliorations.md)
+
 - [ ] **S4 Other ameliorations** found while reading the code (HEIF-with-alpha bug, JPEG-quality and bits-per-pixel columns, hint policy for identical pairs, EXIF orientation, explicit identity flags, `/utf-8` for the C++ sources, v145 miscompiling libde265, EXIF UserComment cut to one character) → [06 § S4](plan/06-stretch-and-ameliorations.md)
+
 - [ ] **S5 Mistakes list:** verify *Remember mistakes* works as a search filter; clearer labels for it and for *Check the database of mistakes at loading*; a quick toggle; never discard entries on an offline drive; crash-safe saving of all core files; path + content identity (lost entries kept and re-linked when found again) with a compact image/pair storage or SQLite. → [06 § S5](plan/06-stretch-and-ameliorations.md)
+
 - [ ] **S6 column for both images of each pair estimating their real, practical quality:** Accounting for jpegQuantSmooth and other genuine quality restoring methods that could be applied to them. T40's score is its first step.
+
 - [ ] **S7 Animated images are compared by their first frame only**, so GIFs that start on a black frame pair up with each other whatever they show (two pairs the user kept in the Tumblr run, Butteraugli 0.0001 and 10.2). Compare a middle frame, or several.
+
 - [ ] **S8 Pictures that are parts of a composite**: the workspace's `Research\set\_failed-to-find-1\` holds two drawings and a picture made of both, rescaled and overlapping (the user's case). Nothing finds them, not even SSIM at 50 %, local colour at 60 % or Butteraugli and the aligned search at 200. Finding them needs matching a part of one picture against a part of another (keypoints, as the aligned search uses, without its single-crop model).
+
 - [ ] **T13** Store all cheap metrics per result and show them as sortable columns, so switching what you sort by needs no new search. → [02](plan/02-comparison-modes.md)
 
 ## Notes for the implementing session
