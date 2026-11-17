@@ -26,7 +26,7 @@ at the other image's path (a rename moves one onto the other), or in the
 Recycle Bin of its drive under either path; reads only, one file at a time.
 Scores come from core_search.py on WORK_DIR\\pairs, one search per setting
 (a batch of pairs at a time for the settings with no candidate filter), the
-aspect ratio filter off as in the user's settings; a value is missing where
+aspect ratio filter off and sizes 1 to 99999 px as in the user's settings; a value is missing where
 the setting doesn't pair the two (filtered out, or over the search's
 threshold). Prints one line per pair: the decision, the
 logged difference, each setting's value, and a * where the setting at its
@@ -228,7 +228,11 @@ def main():
         batches = [[pair_dir]] if name in WHOLE else [folders[i:i + BATCH] for i in range(0, len(folders), BATCH)]
         for batch in batches:
             out = subprocess.run([sys.executable, os.path.join(HERE, "core_search.py"), a.dll,
-                                  os.path.join(a.work, "user-" + name), *batch, "--any-ratio"] + args,
+                                  os.path.join(a.work, "user-" + name), *batch, "--any-ratio",
+                                  # the user's size limits: the core's default
+                                  # maximum, 8196 px, leaves their tall
+                                  # pictures unscored, which reads as a miss
+                                  "--min-size", "1", "--max-size", "99999"] + args,
                                  capture_output=True, text=True, encoding="ascii", errors="replace").stdout
             for line in out.splitlines():
                 m = LINE.match(line)
