@@ -4,7 +4,7 @@ with every algorithm through a build's core, for the settings study
 (plan 07): which algorithm would have shown each pair the user decided on.
 
 Usage:
-    py -3 decision_pairs.py LOG WORK_DIR --dll BIN_RELEASE [--since DATE] [--keep DIR]
+    py -3 decision_pairs.py LOG WORK_DIR --dll BIN_RELEASE [--since DATE] [--keep DIR] [--rescued STORE]
 
 LOG       the decision log of the user's everyday AntiDupl
 WORK_DIR  a scratch folder: pairs\\<n>\\ gets the two images as <n>a and
@@ -18,6 +18,8 @@ WORK_DIR  a scratch folder: pairs\\<n>\\ gets the two images as <n>a and
           it leaves when emptied: the deleted ones, and kept ones whose
           image a later decision deleted) or that are worth keeping
           (linked ones)
+--rescued recycle_rescue.py's store: where to look for an image the
+          Recycle Bin no longer has
 
 An image is found by its logged size and modification time, at its own path,
 at the other image's path (a rename moves one onto the other), or in the
@@ -117,13 +119,14 @@ def renames(events):
     return moved
 
 
-def locate(info, other_path, moved):
+def locate(info, other_path, moved, rescued=None, rescued_index=None):
     """The file now holding this image's content, and where it was found:
     its own path or where a rename took it; the other image's path (a
     replace moves one onto the other); the name the other image gave it in
-    either folder (rename or move like the other); or the Recycle Bin, by
+    either folder (rename or move like the other); the Recycle Bin, by
     path or, as AntiDupl may recycle a file under a temporary name, by size
-    and date alone."""
+    and date alone; or recycle_rescue.py's store `rescued` (its index read
+    once by the caller), once the bin no longer has it."""
     size, mtime = info["size"], logged_mtime(info)
 
     def same(path):
@@ -163,6 +166,11 @@ def locate(info, other_path, moved):
             for bin_size, r in entries:
                 if bin_size == size and same(r):
                     return r, "recycle bin, other name"
+    if rescued:
+        import recycle_rescue  # imports this module: not at the top
+        copy = recycle_rescue.stored(rescued, info, rescued_index)
+        if copy and os.path.exists(copy):
+            return copy, "rescued"
     return None, "missing"
 
 
@@ -173,6 +181,7 @@ def main():
     ap.add_argument("--dll", required=True)
     ap.add_argument("--since")
     ap.add_argument("--keep")
+    ap.add_argument("--rescued")
     a = ap.parse_args()
 
     events = dc.read_log(a.log)
@@ -183,6 +192,10 @@ def main():
                 first_seen.setdefault(dc.key(p), e["time"])
     pairs, decided = dc.replay(events)
     moved = renames(events)
+    rescued_index = None
+    if a.rescued:
+        import recycle_rescue
+        rescued_index = recycle_rescue.read_index(a.rescued)
     keys = sorted((k for k in decided if k in first_seen and pairs[k].get("second")), key=lambda k: first_seen[k])
     if a.since:
         keys = [k for k in keys if first_seen[k][:10] >= a.since]
@@ -195,7 +208,7 @@ def main():
         row = {"n": n, "decision": decided[k], "logged": p["difference"], "first": p["first"]["path"],
                "second": p["second"]["path"]}
         for side, info, other in (("a", p["first"], p["second"]["path"]), ("b", p["second"], p["first"]["path"])):
-            src, where = locate(info, other, moved)
+            src, where = locate(info, other, moved, a.rescued, rescued_index)
             row["from_" + side] = where
             if src:
                 ext = os.path.splitext(info["path"])[1]
