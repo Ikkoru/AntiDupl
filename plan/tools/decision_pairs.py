@@ -17,7 +17,9 @@ WORK_DIR  a scratch folder: pairs\\<n>\\ gets the two images as <n>a and
           archive (any pair with an image found in the Recycle Bin, which
           it leaves when emptied: the deleted ones, and kept ones whose
           image a later decision deleted) or that are worth keeping
-          (linked ones)
+          (linked ones); not those of pixel-identical pairs, and a file
+          whose content is kept already (in the run or the --rescued
+          store) is a hard link to that copy
 --rescued recycle_rescue.py's store: where to look for an image the
           Recycle Bin no longer has
 
@@ -36,6 +38,7 @@ kept, or misses a copy the user deleted); ? where an image is missing.
 import argparse
 import csv
 import datetime
+import hashlib
 import os
 import re
 import shutil
@@ -286,12 +289,55 @@ def main():
         os.makedirs(os.path.join(a.keep, "pairs"), exist_ok=True)
         for name in ("pairs.tsv", "scores.tsv", "report.txt"):
             shutil.copy2(os.path.join(a.work, name), os.path.join(a.keep, name))
+        known = {}
+        if a.rescued:
+            for f in (os.path.join(dp_, n) for dp_, _, names in os.walk(a.rescued) for n in names):
+                if not f.endswith("index.tsv"):
+                    known.setdefault(content_key(f), f)
+        for d in (os.path.join(a.keep, "pairs", n) for n in os.listdir(os.path.join(a.keep, "pairs"))):
+            for f in (os.path.join(d, n) for n in os.listdir(d)):
+                known.setdefault(content_key(f), f)
         for r in rows:
             src = os.path.join(pair_dir, str(r["n"]))
             from_bin = "recycle bin" in r["from_a"] or "recycle bin" in r["from_b"]
-            if (from_bin or r["decision"] in ("deleted", "linked")) and os.path.isdir(src):
-                shutil.copytree(src, os.path.join(a.keep, "pairs", str(r["n"])), dirs_exist_ok=True)
+            # A pixel-identical pair (the GUI's 0.00) teaches nothing.
+            identical = r["logged"] is not None and float(r["logged"]) < IDENTICAL_MAX
+            if (from_bin or r["decision"] in ("deleted", "linked")) and not identical and os.path.isdir(src):
+                dst = os.path.join(a.keep, "pairs", str(r["n"]))
+                os.makedirs(dst, exist_ok=True)
+                for name in os.listdir(src):
+                    keep_file(os.path.join(src, name), os.path.join(dst, name), known)
     return 0
+
+
+IDENTICAL_MAX = 0.00001
+
+
+def content_key(path):
+    h = hashlib.sha1()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return os.path.getsize(path), h.hexdigest()
+
+
+def keep_file(src, dst, known):
+    """Copies src to dst, or hard-links dst to a kept file of the same
+    content (the same image in several pairs, both images of a byte-
+    identical pair, a picture recycle_rescue.py stored): one copy on
+    disk, which file comparers skip as a hard link. `known` maps
+    content_key to a kept path and learns dst."""
+    if os.path.exists(dst):
+        return
+    key = content_key(src)
+    if key in known:
+        try:
+            os.link(known[key], dst)
+            return
+        except OSError:  # another volume, or the link limit
+            pass
+    shutil.copy2(src, dst)
+    known.setdefault(key, dst)
 
 
 if __name__ == "__main__":
