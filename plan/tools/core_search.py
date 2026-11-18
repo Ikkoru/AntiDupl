@@ -58,6 +58,10 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
 --drop-pairs TSV  takes the pairs of another run's --tsv file out of the
             results, in either order (printed, written and saved): what a
             looser search adds to a stricter one
+--filename-filter R  the Paths window's "Filename Filter (Regex)" for the
+            search: files whose name matches R are left out
+--refresh-filter R  sets that filter after the search and refreshes the
+            results, as Search > Refresh results does
 --min-size N  the smallest side searched, in pixels (the core's default
             leaves small images out; the user's settings say 1)
 --save-results FILE  saves the result list as an AntiDupl results file
@@ -82,7 +86,7 @@ AD_OPTIONS_COMPARE, AD_OPTIONS_ADVANCED = 1, 3
 AD_PATH_SEARCH = 0
 AD_FILE_RESULT, AD_FILE_IMAGE_DATA_BASE = 1, 3
 AD_LOCAL_ACTION_MISTAKE, AD_TARGET_SELECTED = 13, 1
-AD_GLOBAL_ACTION_SET_HINT, AD_GLOBAL_ACTION_SET_GROUP = 0, 1
+AD_GLOBAL_ACTION_SET_HINT, AD_GLOBAL_ACTION_SET_GROUP, AD_GLOBAL_ACTION_REFRESH = 0, 1, 2
 AD_SORT_BY_DIFFERENCE = 38
 AD_RESULT_DEFECT_IMAGE, AD_RESULT_DUPL_IMAGE_PAIR = 1, 2
 IMAGE_TYPES = ["NONE", "BMP", "GIF", "JPEG", "PNG", "TIFF", "EMF", "WMF", "EXIF", "ICON", "JP2", "PSD",
@@ -261,6 +265,8 @@ def main():
     ap.add_argument("--save-results")
     ap.add_argument("--drop-pairs")
     ap.add_argument("--min-size", type=int)
+    ap.add_argument("--filename-filter")
+    ap.add_argument("--refresh-filter")
     a = ap.parse_args()
 
     real = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", ""), "AntiDupl.NET"))
@@ -355,6 +361,10 @@ def main():
             buf[:len(p)] = p
             buf[MAX_PATH_EX] = "\x01"                   # include subfolders
         assert core.adPathWithSubFolderSetW(h, AD_PATH_SEARCH, ctypes.byref(bufs), len(a.search_dir)) == 0
+        if a.filename_filter is not None or a.refresh_filter is not None:
+            core.adIgnoreFilenameFilterSetW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+        if a.filename_filter is not None:
+            assert core.adIgnoreFilenameFilterSetW(h, a.filename_filter) == 0
 
         for run in range(a.runs):
             if a.use_db:                                # same order as SearchExecuterForm
@@ -371,6 +381,9 @@ def main():
             # file loads (invalid file format), and the GUI then shows none.
             core.adResultApply(h, AD_GLOBAL_ACTION_SET_GROUP)
             core.adResultApply(h, AD_GLOBAL_ACTION_SET_HINT)
+            if a.refresh_filter is not None:              # as Search > Refresh results
+                assert core.adIgnoreFilenameFilterSetW(h, a.refresh_filter) == 0
+                assert core.adResultApply(h, AD_GLOBAL_ACTION_REFRESH) == 0
             if a.use_db:
                 err = core.adSaveW(h, AD_FILE_IMAGE_DATA_BASE, db_dir)
                 if err:
