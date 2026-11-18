@@ -345,6 +345,13 @@ def main():
                 sys.exit("this build has no Butteraugli working size")
             size.value = a.butteraugli_size
         assert core.adOptionsSet(h, AD_OPTIONS_COMPARE, cmp_buf) == 0
+        # The core puts a value outside an option's range back to its
+        # default without an error (TOption::Validate): a threshold of 1000
+        # searches at 5, and the results look like a real run's.
+        back = (ctypes.c_byte * len(cmp_buf))()
+        core.adOptionsGet(h, AD_OPTIONS_COMPARE, back)
+        if bytes(back) != bytes(cmp_buf):
+            sys.exit("the core reset a compare option out of its range (the threshold goes to 50 at most)")
         adv = AdvancedOptions()
         core.adOptionsGet(h, AD_OPTIONS_ADVANCED, ctypes.byref(adv))
         adv.reducedImageSize = a.size
