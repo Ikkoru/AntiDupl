@@ -97,13 +97,18 @@ def main():
             return False
         return small or not any(i["stem"].startswith(("scale-12", "scale-25")) for i in (ia, ib))
 
-    print(f"{'class':16} {'pairs':>6} {'found':>6} {'median':>8} {'max':>8}")
+    thresholds = [float(x) for x in a.thresholds.split(",")]
+    # The found column per class, also up to the two highest thresholds.
+    shown = sorted(thresholds)[-2:]
+    print(f"{'class':16} {'pairs':>6} {'found':>6}" + "".join(f" {'<= ' + format(t, 'g'):>8}" for t in shown) +
+          f" {'median':>8} {'max':>8}")
     for cls in sorted({r["class"] for r in rows}):
         sel = [r["value"] for r in rows if r["class"] == cls]
         fin = [v for v in sel if v < math.inf]
         med = f"{statistics.median(fin):8.3f}" if fin else f"{'-':>8}"
         top = f"{max(fin):8.3f}" if fin else f"{'-':>8}"
-        print(f"{cls:16} {len(sel):6} {len(fin):6} {med} {top}")
+        under = "".join(f" {sum(1 for v in fin if v <= t):8}" for t in shown)
+        print(f"{cls:16} {len(sel):6} {len(fin):6}{under} {med} {top}")
 
     versions = [r for r in rows if r["class"] in ss.VERSION_CLASSES]
     print()
