@@ -5,7 +5,7 @@ size, plain and aligned. For the values in CoreOptionsForm
 
 Usage:
     py -3 threshold_sizes.py WORK_DIR --dll BIN_RELEASE [--skip TEXT]...
-                             [--anchors 8.5,15] RUN_DIR...
+                             [--anchors 8.5,15] [--sizes 384,...] RUN_DIR...
 
 WORK_DIR  a scratch folder: pairs\\<id>\\ gets the two images, scores.tsv the
           scores; a second run reuses the copies
@@ -14,6 +14,9 @@ WORK_DIR  a scratch folder: pairs\\<id>\\ gets the two images, scores.tsv the
           user keeps on purpose, whose "mistakes" aren't versions
 --anchors the two thresholds at 768 px (the default and the second one) to
           find the matching ones of at every size for (default 8.5,15)
+--sizes   the working sizes to score at, 768 among them (default the
+          option lists' 384,512,768,1024; the core takes up to
+          BUTTERAUGLI_SIZE_MAX)
 RUN_DIR  a run saved by decision_pairs.py --keep: its pairs.tsv, its
           scores.tsv, and aligned-scores.tsv where there is one, with the
           columns n, decision, plain, aligned. A pair comes from the run's
@@ -80,16 +83,17 @@ def collect(runs, pair_dir, skip):
     return found
 
 
-def score(work, pair_dir, dll, pairs):
+def score(work, pair_dir, dll, pairs, sizes):
     """{column: {id: score}}, one search per algorithm and size."""
     scores = {}
     for algorithm, name in ((4, "plain"), (5, "aligned")):
-        for size in SIZES:
+        for size in sizes:
             column = f"{name}-{size}"
             user = os.path.join(work, "user-" + column)
             os.makedirs(user, exist_ok=True)
             out = subprocess.run([sys.executable, os.path.join(HERE, "core_search.py"), dll, user, pair_dir, "--any-ratio",
                                   "--algorithm", str(algorithm), "--size", "128", "--threshold", "50",
+                                  "--min-size", "1", "--max-size", "99999",  # none left out
                                   "--butteraugli-size", str(size)],
                                  capture_output=True, text=True, encoding="ascii", errors="replace").stdout
             values = scores[column] = {}
@@ -121,14 +125,18 @@ def main():
     ap.add_argument("--dll", required=True)
     ap.add_argument("--skip", action="append", default=[])
     ap.add_argument("--anchors", default="8.5,15")
+    ap.add_argument("--sizes", default=",".join(map(str, SIZES)))
     ap.add_argument("runs", nargs="+")
     a = ap.parse_args()
     anchors = [float(x) for x in a.anchors.split(",")]
+    sizes = [int(x) for x in a.sizes.split(",")]
+    if 768 not in sizes:
+        sys.exit("--sizes needs 768, the size the anchors are at")
 
     pair_dir = os.path.join(a.work, "pairs")
     os.makedirs(pair_dir, exist_ok=True)
     pairs = collect(a.runs, pair_dir, a.skip)
-    scores = score(a.work, pair_dir, a.dll, pairs)
+    scores = score(a.work, pair_dir, a.dll, pairs, sizes)
     columns = list(scores)
     with open(os.path.join(a.work, "scores.tsv"), "w", encoding="utf-8", newline="\n") as f:
         f.write("id\tdecision\t" + "\t".join(columns) + "\n")
@@ -137,14 +145,14 @@ def main():
 
     for name in ("plain", "aligned"):
         print(f"\n{name}: kept and acted on, up to each threshold")
-        print("  threshold " + "".join(f"{size:>14}" for size in SIZES))
+        print("  threshold " + "".join(f"{size:>14}" for size in sizes))
         for step in STEPS:
-            cells = (counts(scores[f"{name}-{size}"], pairs, step) for size in SIZES)
+            cells = (counts(scores[f"{name}-{size}"], pairs, step) for size in sizes)
             print(f"  {step:>9} " + "".join(f"{k:>7} {x:>6}" for k, x in cells))
         for anchor in anchors:
             base = counts(scores[f"{name}-768"], pairs, anchor)
             print(f"  as {anchor} at 768 px {base}:")
-            for size in SIZES:
+            for size in sizes:
                 values = scores[f"{name}-{size}"]
                 best = min(STEPS, key=lambda t: (abs(counts(values, pairs, t)[0] - base[0]) +
                                                  abs(counts(values, pairs, t)[1] - base[1]), t))
