@@ -3,11 +3,13 @@ without and with alignment: per pair, the fragments of the default 16 x 16 grid
 whose largest map value exceeds the threshold, as MarkedFragments marks them.
 
 Usage: py -3 highlight_check.py PAIRS_DIR DLL_DIR N[,N...] [--pictures DIR]
-                                [--threshold T]
+                                [--threshold T] [--map-side N]
 
 PAIRS_DIR  one folder per pair, named by its number, holding its two images
            (decision_pairs.py's pairs folder)
 DLL_DIR    a build with adAlignedDifferenceMaps
+--map-side the difference maps' longest side, to try others than the
+           preview's (ResultsOptions.PERCEPTUAL_DIFFERENCE_SIZE)
 --pictures writes one sheet per pair: both images with the plain marks on top,
            with the aligned ones below
 Prints per pair whether it aligned, the marks without and with alignment (per
@@ -33,8 +35,8 @@ class Bitmap(ctypes.Structure):
                 ("format", ctypes.c_int32), ("data", ctypes.c_void_p)]
 
 
-def map_size(w, h):
-    s = min(1.0, MAP_SIDE / max(w, h))
+def map_size(w, h, side=MAP_SIDE):
+    s = min(1.0, side / max(w, h))
     return max(8, round(w * s)), max(8, round(h * s))
 
 
@@ -80,6 +82,7 @@ def main():
     p.add_argument("numbers")
     p.add_argument("--pictures")
     p.add_argument("--threshold", type=float, default=12.0)
+    p.add_argument("--map-side", type=int, default=MAP_SIDE)
     a = p.parse_args()
     core = ctypes.CDLL(os.path.join(a.dll, "AntiDupl.dll"))
     bp = ctypes.POINTER(Bitmap)
@@ -95,7 +98,7 @@ def main():
             rgb = np.asarray(im)
             pixels.append(np.ascontiguousarray(np.dstack([rgb[:, :, 2], rgb[:, :, 1], rgb[:, :, 0], np.full(rgb.shape[:2], 255, np.uint8)])))
         bitmaps = [Bitmap(x.shape[1], x.shape[0], x.shape[1] * 4, ARGB32, x.ctypes.data) for x in pixels]
-        s1, s2 = map_size(*ims[0].size), map_size(*ims[1].size)
+        s1, s2 = map_size(*ims[0].size, a.map_side), map_size(*ims[1].size, a.map_side)
         plain = np.zeros((s1[1], s1[0]), np.float32)
         if core.adDifferenceMap(ctypes.byref(bitmaps[0]), ctypes.byref(bitmaps[1]), s1[0], s1[1], plain.ctypes.data):
             raise SystemExit(f"adDifferenceMap refused pair {n}")
