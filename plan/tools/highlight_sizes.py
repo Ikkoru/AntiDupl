@@ -1,12 +1,16 @@
 """The perceptual highlight at several map sizes on the real runs' pairs
-scored by threshold_sizes.py: per size, how many copies (acted on, aligned
-768 score up to 12) get any mark, and how many kept versions (mistakes, any
-score up to 50) get none; with the time per pair. Marks as highlight_check
-counts them (threshold 12, 16 x 16 grid), aligned where the pair aligns and
-on the plain map where it doesn't, as the preview does. A version with any
-mark counts as found, whether or not the mark is on what differs.
+scored by threshold_sizes.py: per size and highlight threshold, how many
+copies (acted on, aligned 768 score up to 12) get any mark, and how many
+kept versions (mistakes, any score up to 50) get none; with the time per
+pair. Marks as highlight_check counts them (16 x 16 grid; a pair has a mark
+when its map's largest value is over the threshold), aligned where the pair
+aligns and on the plain map where it doesn't, as the preview does. A
+version with any mark counts as found, whether or not the mark is on what
+differs.
 
-    py -3 highlight_sizes.py <threshold_sizes work dir> <bin\\Release> <sides,...>
+    py -3 highlight_sizes.py <threshold_sizes work dir> <bin\\Release> <sides,...> [thresholds,...]
+
+The thresholds default to 12, the preview's default.
 """
 import csv
 import ctypes
@@ -23,6 +27,7 @@ import highlight_check as hc
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 Image.MAX_IMAGE_PIXELS = None
 work, dll, sides = sys.argv[1], sys.argv[2], [int(s) for s in sys.argv[3].split(",")]
+thresholds = [float(t) for t in sys.argv[4].split(",")] if len(sys.argv) > 4 else [12.0]
 core = ctypes.CDLL(os.path.join(dll, "AntiDupl.dll"))
 bp = ctypes.POINTER(hc.Bitmap)
 core.adAlignedDifferenceMaps.argtypes = [bp, bp, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p,
@@ -69,7 +74,9 @@ def marked(pair, side):
         if core.adDifferenceMap(ctypes.byref(bms[0]), ctypes.byref(bms[1]), s1[0], s1[1], m1.ctypes.data):
             return None, 0
     t = time.perf_counter() - t
-    return len(hc.marks(m1, *s1, 12.0)), t
+    # hc.marks finds a cell over the threshold exactly when the map's
+    # largest value is: the cells cover the whole map.
+    return float(m1.max()), t
 
 
 for side in sides:
@@ -87,6 +94,7 @@ for side in sides:
     if side == sides[0]:
         print(f"left out (unreadable or refused): {len(copies) - len(c)} copies, {len(versions) - len(v)} versions")
     t = out["copies-t"] + out["versions-t"]
-    print(f"{side:5}: copies marked {sum(1 for x in c if x)}/{len(c)} (mean marks {np.mean(c):.2f}),"
-          f" versions unmarked {sum(1 for x in v if not x)}/{len(v)},"
-          f" median {np.median(t) * 1000:.0f} ms, 90 % {np.percentile(t, 90) * 1000:.0f} ms", flush=True)
+    print(f"{side:5}: median {np.median(t) * 1000:.0f} ms, 90 % {np.percentile(t, 90) * 1000:.0f} ms", flush=True)
+    for threshold in thresholds:
+        print(f"       threshold {threshold:4g}: copies marked {sum(1 for x in c if x > threshold)}/{len(c)},"
+              f" versions unmarked {sum(1 for x in v if x <= threshold)}/{len(v)}", flush=True)

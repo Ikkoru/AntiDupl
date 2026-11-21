@@ -16,8 +16,9 @@ WORK_DIR  a scratch folder: pairs\\<n>\\ gets the two images as <n>a and
           and the copies of the pairs a later run can't copy again from the
           archive (any pair with an image found in the Recycle Bin, which
           it leaves when emptied: the deleted ones, and kept ones whose
-          image a later decision deleted) or that are worth keeping
-          (linked ones); not those of pixel-identical pairs, and a file
+          image a later decision deleted, and any with an image found under
+          another name) or that are worth keeping (linked ones); not those
+          of pixel-identical pairs or with an image found nowhere, and a file
           whose content is kept already (in the run or the --rescued
           store) is a hard link to that copy
 --rescued recycle_rescue.py's store: where to look for an image the
@@ -300,9 +301,14 @@ def main():
         for r in rows:
             src = os.path.join(pair_dir, str(r["n"]))
             from_bin = "recycle bin" in r["from_a"] or "recycle bin" in r["from_b"]
-            # A pixel-identical pair (the GUI's 0.00) teaches nothing.
+            # Found under another name (the user renames kept versions): a
+            # later run looks for the logged name and finds nothing.
+            renamed = any(word in r[k] for word in ("renamed", "replaced") for k in ("from_a", "from_b"))
+            # A pixel-identical pair (the GUI's 0.00) teaches nothing, and
+            # nor does one whose other image was found nowhere.
             identical = r["logged"] is not None and float(r["logged"]) < IDENTICAL_MAX
-            if (from_bin or r["decision"] in ("deleted", "linked")) and not identical and os.path.isdir(src):
+            complete = os.path.isdir(src) and len(os.listdir(src)) == 2
+            if (from_bin or renamed or r["decision"] in ("deleted", "linked")) and not identical and complete:
                 dst = os.path.join(a.keep, "pairs", str(r["n"]))
                 os.makedirs(dst, exist_ok=True)
                 for name in os.listdir(src):

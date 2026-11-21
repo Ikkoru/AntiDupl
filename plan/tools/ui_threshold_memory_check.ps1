@@ -21,6 +21,7 @@ function ToolBarLists($main) {
 try {
 # --- tool bar: a threshold for each algorithm, then back to each
 $p, $main = Start-AdBuild $Exe $s
+Expand-AdWindow $main
 $algorithm, $threshold = ToolBarLists $main
 $choices = [ordered]@{ 'Mean square difference' = '3 %'; 'SSIM' = '0.5 %'; 'Local colour difference' = '2 %'; 'Perceptual (Butteraugli)' = '7.5' }
 foreach ($a in $choices.Keys) {
@@ -35,6 +36,7 @@ Stop-AdBuild $p $main
 
 # --- after a restart: the profile's algorithm and threshold, and the others remembered
 $p, $main = Start-AdBuild $Exe $s
+Expand-AdWindow $main
 $algorithm, $threshold = ToolBarLists $main
 Check 'after restart, threshold' $threshold.Current.Name '7.5'
 Select-AdListItem $algorithm 'SSIM'
@@ -56,7 +58,7 @@ Check 'dialog, local colour' (Get-AdListValue $dThreshold) '2 %'
 Select-AdListItem $dAlgorithm 'Perceptual (Butteraugli)'
 Check 'dialog, back to Butteraugli' (Get-AdListValue $dThreshold) '7.5'
 Select-AdListItem $dSize '512 px'
-Check 'dialog, 512 px first time (its default)' (Get-AdListValue $dThreshold) '6'
+Check 'dialog, 512 px first time (its default)' (Get-AdListValue $dThreshold) '9'  # THRESHOLD_DIFFERENCE_DEFAULT_BUTTERAUGLI[512]
 Select-AdListItem $dThreshold '5.5'
 Select-AdListItem $dSize '768 px'
 Check 'dialog, back to 768 px' (Get-AdListValue $dThreshold) '7.5'

@@ -130,11 +130,23 @@ function Send-AdButton($dialog, [string]$Name) {
 
 function Get-AdLists($root) { @($root.FindAll($TS::Descendants, (New-AdCondition $AE::ControlTypeProperty $CT::ComboBox))) }
 
+# An opened drop-down list's items, once they are there: on a busy machine
+# the list fills later than a fixed wait allows, and an empty read looks
+# exactly like a missing item.
+function Wait-AdListItems($combo) {
+    $deadline = (Get-Date).AddSeconds(8)
+    do {
+        Start-Sleep -Milliseconds 200
+        $items = @($combo.FindAll($TS::Descendants, (New-AdCondition $AE::ControlTypeProperty $CT::ListItem)))
+    } while ($items.Count -eq 0 -and (Get-Date) -lt $deadline)
+    $items
+}
+
 # The item names of a drop-down list (opened and closed again to read them).
 function Get-AdListItems($combo) {
     $ec = $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
-    $ec.Expand(); Start-Sleep -Milliseconds 400
-    $names = @($combo.FindAll($TS::Descendants, (New-AdCondition $AE::ControlTypeProperty $CT::ListItem)) | ForEach-Object { $_.Current.Name })
+    $ec.Expand()
+    $names = @(Wait-AdListItems $combo | ForEach-Object { $_.Current.Name })
     try { $ec.Collapse() } catch {}
     Start-Sleep -Milliseconds 300
     $names
@@ -142,10 +154,10 @@ function Get-AdListItems($combo) {
 
 function Select-AdListItem($combo, [string]$Name) {
     $ec = $combo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
-    $ec.Expand(); Start-Sleep -Milliseconds 400
-    $item = @($combo.FindAll($TS::Descendants, (New-AdCondition $AE::ControlTypeProperty $CT::ListItem))) |
-        Where-Object { $_.Current.Name -eq $Name } | Select-Object -First 1
-    if (-not $item) { try { $ec.Collapse() } catch {}; throw "no item '$Name'" }
+    $ec.Expand()
+    $items = @(Wait-AdListItems $combo)
+    $item = $items | Where-Object { $_.Current.Name -eq $Name } | Select-Object -First 1
+    if (-not $item) { try { $ec.Collapse() } catch {}; throw "no item '$Name' among $($items.Count): $(($items | ForEach-Object { $_.Current.Name }) -join ' | ')" }
     $item.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
     try { $ec.Collapse() } catch {}
     Start-Sleep -Milliseconds 600

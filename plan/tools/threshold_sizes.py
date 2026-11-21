@@ -61,11 +61,17 @@ def run_pairs(run):
 def collect(runs, pair_dir, skip):
     """Copies each run's pairs to <pair_dir>\\<id>; returns {id: decision}.
     A pair's id is the run's place in the list, then its number."""
-    found, missing = {}, 0
+    found, missing, unused = {}, 0, 0
     for index, run in enumerate(runs, 1):
         named = {r["n"]: r for r in read(os.path.join(run, "pairs.tsv"))}
         for n, decision in run_pairs(run):
             if any(text in named[n]["first"] + named[n]["second"] for text in skip):
+                continue
+            # Undecided pairs count on neither side, and pixel-identical ones
+            # score 0 at every size; runs don't keep the latter's images.
+            logged = named[n].get("logged")
+            if decision == "left" or (logged and float(logged) < 0.00001):
+                unused += 1
                 continue
             pair = f"{index}{int(n):05}"
             folder = os.path.join(pair_dir, pair)
@@ -79,7 +85,7 @@ def collect(runs, pair_dir, skip):
                 for side, src in zip("ab", sources):
                     shutil.copy2(src, os.path.join(folder, pair + side + os.path.splitext(src)[1]))
             found[pair] = decision
-    print(f"{len(found)} pairs, {missing} with an image gone")
+    print(f"{len(found)} pairs, {missing} with an image gone; {unused} undecided or pixel-identical left out")
     return found
 
 
