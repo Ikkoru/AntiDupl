@@ -28,6 +28,16 @@
 
 namespace ad
 {
+    // What images with transparency are laid over for one comparison
+    // (transparency shown): AS_STORED when neither image has any, else
+    // white, black, or the colour bgr (B, G, R) a flattened copy was filled
+    // with. An image without transparency looks the same over any of them.
+    struct TBackground
+    {
+        enum TKind { AS_STORED = 0, WHITE = 1, BLACK = 2, FILL = 3 } kind;
+        TUInt8 bgr[3];
+    };
+
     struct TPixelData
     {
         //初始化顺序存在依赖关系，必须按照这个顺序排列

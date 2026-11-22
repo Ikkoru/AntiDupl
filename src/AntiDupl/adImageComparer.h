@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "adConfig.h"
+#include "adPixelData.h"
 
 namespace ad
 {
@@ -88,6 +89,13 @@ namespace ad
         // every set.
         bool m_asShown;
         Set m_alphaSet;
+        // For a comparer that looks at the images themselves, not their
+        // thumbnails (Butteraugli): the pair IsDuplPair gets may be stand-ins
+        // made of other thumbnails (an image over black, or filled with a
+        // colour). These say, for each call, which image of the sets the
+        // second stands for, and what both are laid over.
+        TImageDataPtr m_pSecondShown;
+        TBackground m_background;
 
         // Transparent areas ignored (adCompareOptions::ignoreTransparent,
         // with transparency shown): a pair with transparency is also
@@ -129,6 +137,7 @@ namespace ad
             TImageDataPtr pSecond, TImageDataPtr pSecondBlack, bool secondAlpha, double *pDifference);
         bool OverBoth(TImageDataPtr pFirst, TImageDataPtr pFirstBlack, TImageDataPtr pSecond, TImageDataPtr pSecondBlack, double *pDifference);
         bool UniformFill(TImageDataPtr pAlpha, TImageDataPtr pAlphaBlack, TImageDataPtr pOpaque, TUInt8 *bgr);
+        void SetFill(const TUInt8 *bgr);
         void MakeBlack(TImageData *pBlack, TImageDataPtr pImageData);
         void MakeFilled(TImageData *pFilled, TImageDataPtr pImageData, TImageDataPtr pBlack, const TUInt8 *bgr);
         void CopyInfo(TImageData *pTo, TImageDataPtr pFrom);
@@ -281,6 +290,11 @@ namespace ad
         // The score of a pair local colour lets through, for the image being
         // compared in its turn; negative when a file can't be decoded.
         virtual double Score(TImageDataPtr pSecond);
+        // Transparent areas ignored: local colour's masked difference as the
+        // candidate test, then Butteraugli on the two laid over each other
+        // (TButteraugliStore::MaskedScore).
+        virtual bool MaskedDifference(TImageDataPtr pFirst, const TOpaquePart *pFirstPart,
+            TImageDataPtr pSecond, const TOpaquePart *pSecondPart, double *pDifference);
 
         TButteraugliStore *m_pStore;
         // The image being compared and its turn: IsDuplPair gets the turned

@@ -49,8 +49,10 @@ namespace ad
         m_pMask(NULL),
         m_asShown(pEngine->Options()->compare.transparentAsShown == TRUE),
         m_pIncomingBlack(NULL),
-        m_pFilled(NULL)
+        m_pFilled(NULL),
+        m_pSecondShown(NULL)
     {
+        m_background.kind = TBackground::AS_STORED;
         if(m_asShown)
         {
             m_pIncomingBlack = new TImageData(m_pOptions->advanced.reducedImageSize);
@@ -196,6 +198,8 @@ namespace ad
     {
         const bool firstAlpha = m_asShown && pFirst->data->alpha;
         const bool secondAlpha = m_asShown && pSecond->data->alpha;
+        m_pSecondShown = pSecond;
+        m_background.kind = TBackground::AS_STORED;
         if(!firstAlpha && !secondAlpha)
             return IsDuplPairAny(pFirst, pSecond, pDifference);
         TImageDataPtr pSecondBlack = secondAlpha ? m_blackTwins[pSecond] : pSecond;
@@ -223,6 +227,7 @@ namespace ad
             if(UniformFill(pFirst, pFirstBlack, pSecond, bgr))
             {
                 MakeFilled(m_pFilled, pFirst, pFirstBlack, bgr);
+                SetFill(bgr);
                 return IsDuplPairAny(m_pFilled, pSecond, pDifference);
             }
             return OverBoth(pFirst, pFirstBlack, pSecond, pSecond, pDifference);
@@ -230,9 +235,17 @@ namespace ad
         if(UniformFill(pSecond, pSecondBlack, pFirst, bgr))
         {
             MakeFilled(m_pFilled, pSecond, pSecondBlack, bgr);
+            SetFill(bgr);
             return IsDuplPairAny(pFirst, m_pFilled, pDifference);
         }
         return OverBoth(pFirst, pFirst, pSecond, pSecondBlack, pDifference);
+    }
+
+    void TImageComparer::SetFill(const TUInt8 *bgr)
+    {
+        m_background.kind = TBackground::FILL;
+        for(int c = 0; c < 3; ++c)
+            m_background.bgr[c] = bgr[c];
     }
 
     // A pair over white and over black: a duplicate only if it is one over
@@ -241,7 +254,11 @@ namespace ad
     bool TImageComparer::OverBoth(TImageDataPtr pFirst, TImageDataPtr pFirstBlack, TImageDataPtr pSecond, TImageDataPtr pSecondBlack, double *pDifference)
     {
         double white, black;
-        if(!IsDuplPairAny(pFirst, pSecond, &white) || !IsDuplPairAny(pFirstBlack, pSecondBlack, &black))
+        m_background.kind = TBackground::WHITE;
+        if(!IsDuplPairAny(pFirst, pSecond, &white))
+            return false;
+        m_background.kind = TBackground::BLACK;
+        if(!IsDuplPairAny(pFirstBlack, pSecondBlack, &black))
             return false;
         *pDifference = std::max(white, black);
         return true;
@@ -1037,6 +1054,21 @@ namespace ad
         CompareWithSet(m_sets[0], pOriginal, pTransformed, transform);
     }
 
+    bool TImageComparer_LocalColor::IsDuplPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference)
+    {
+        const double localColor = LocalColorDifference(pFirst, pSecond);
+        if(localColor < 0)
+            return false;
+        double difference = PixelDifference(pFirst, pSecond, localColor);
+        if(difference > m_threshold)
+            return false;
+
+        *pDifference = difference;
+        if(pFirst->crc32c != pSecond->crc32c)
+            *pDifference += ADDITIONAL_DIFFERENCE_FOR_DIFFERENT_CRC32;
+        return true;
+    }
+
     bool TImageComparer_LocalColor::ShiftedDifference(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference)
     {
         return false;
@@ -1094,23 +1126,8 @@ namespace ad
             return false;
         const double rms = sqrt(double(worst)/(blockPixels*3));
         double difference = PixelDifference(pFirst, pSecond, rms*DENOMINATOR/PIXEL_MAX_DIFFERENCE);
-        if(difference > m_pOptions->compare.thresholdDifference)
-            return false;
-        *pDifference = difference;
-        if(pFirst->crc32c != pSecond->crc32c)
-            *pDifference += ADDITIONAL_DIFFERENCE_FOR_DIFFERENT_CRC32;
-        return true;
-    }
-
-    bool TImageComparer_LocalColor::IsDuplPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference)
-    {
-        const double localColor = LocalColorDifference(pFirst, pSecond);
-        if(localColor < 0)
-            return false;
-        double difference = PixelDifference(pFirst, pSecond, localColor);
         if(difference > m_threshold)
             return false;
-
         *pDifference = difference;
         if(pFirst->crc32c != pSecond->crc32c)
             *pDifference += ADDITIONAL_DIFFERENCE_FOR_DIFFERENT_CRC32;
@@ -1200,7 +1217,7 @@ namespace ad
 
     double TImageComparer_Butteraugli::Score(TImageDataPtr pSecond)
     {
-        return m_pStore->Score(m_pOriginal, pSecond, m_transform);
+        return m_pStore->Score(m_pOriginal, pSecond, m_transform, m_background);
     }
 
     bool TImageComparer_Butteraugli::IsDuplPair(TImageDataPtr pFirst, TImageDataPtr pSecond, double *pDifference)
@@ -1211,7 +1228,9 @@ namespace ad
         double score = PixelDifference(pFirst, pSecond, 1);
         if(score > 0)
         {
-            score = Score(pSecond);
+            // pSecond may be a stand-in of thumbnails; the store scores the
+            // image itself, over the background of this comparison.
+            score = Score(m_pSecondShown);
             if(score < 0)
                 return false;
         }
@@ -1219,6 +1238,30 @@ namespace ad
         if(difference > m_pOptions->compare.thresholdDifference)
             return false;
 
+        *pDifference = difference;
+        if(pFirst->crc32c != pSecond->crc32c)
+            *pDifference += ADDITIONAL_DIFFERENCE_FOR_DIFFERENT_CRC32;
+        return true;
+    }
+
+    bool TImageComparer_Butteraugli::MaskedDifference(TImageDataPtr pFirst, const TOpaquePart *pFirstPart,
+        TImageDataPtr pSecond, const TOpaquePart *pSecondPart, double *pDifference)
+    {
+        double candidate;
+        if(!TImageComparer_LocalColor::MaskedDifference(pFirst, pFirstPart, pSecond, pSecondPart, &candidate))
+            return false;
+        // pSecond is the image of the sets itself here; the image being
+        // compared is m_pOriginal, in its turn.
+        double score = PixelDifference(pFirst, pSecond, 1);
+        if(score > 0)
+        {
+            score = m_pStore->MaskedScore(m_pOriginal, pSecond, m_transform);
+            if(score < 0)
+                return false;
+        }
+        double difference = PixelDifference(pFirst, pSecond, score);
+        if(difference > m_pOptions->compare.thresholdDifference)
+            return false;
         *pDifference = difference;
         if(pFirst->crc32c != pSecond->crc32c)
             *pDifference += ADDITIONAL_DIFFERENCE_FOR_DIFFERENT_CRC32;
@@ -1249,7 +1292,7 @@ namespace ad
         const double score = TImageComparer_Butteraugli::Score(pSecond);
         if(score < ALIGN_PLAIN_SCORE_MIN || m_transform != AD_TRANSFORM_TURN_0)
             return score;
-        const double aligned = m_pStore->AlignedScore(m_pOriginal, pSecond);
+        const double aligned = m_pStore->AlignedScore(m_pOriginal, pSecond, m_background);
         return aligned >= 0 ? std::min(score, aligned) : score;
     }
 
@@ -1260,7 +1303,22 @@ namespace ad
         if(!Comparable(pFirst, pSecond) || LocalColorDifference(pFirst, pSecond) >= 0)
             return false;
 
-        const double score = m_pStore->AlignedScore(pFirst, pSecond);
+        // With transparency involved, over white and over black, the larger
+        // score counting, as TImageComparer::OverBoth: a copy filled with
+        // one colour can't be told from a crop's thumbnails here.
+        TBackground background;
+        background.kind = TBackground::AS_STORED;
+        double score;
+        if(m_asShown && (pFirst->data->alpha || pSecond->data->alpha))
+        {
+            background.kind = TBackground::WHITE;
+            const double white = m_pStore->AlignedScore(pFirst, pSecond, background);
+            background.kind = TBackground::BLACK;
+            const double black = white < 0 ? -1 : m_pStore->AlignedScore(pFirst, pSecond, background);
+            score = black < 0 ? -1 : std::max(white, black);
+        }
+        else
+            score = m_pStore->AlignedScore(pFirst, pSecond, background);
         if(score < 0)
             return false;
         const double difference = PixelDifference(pFirst, pSecond, score);
