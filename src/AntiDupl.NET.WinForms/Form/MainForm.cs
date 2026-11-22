@@ -60,6 +60,16 @@ namespace AntiDupl.NET.WinForms
             m_options = options;
             DecisionLog.Start();
             Application.AddMessageFilter(new DecisionLog.HotKeyWatcher(m_options));
+            // A profile in the release's settings folder belongs to that
+            // install (an options.xml copied from it still names it): this
+            // build would rewrite it on closing, in a format the release
+            // can't read back.
+            string releaseProfile = null;
+            if (Options.InReleaseSettings(m_options.coreOptionsFileName))
+            {
+                releaseProfile = m_options.coreOptionsFileName;
+                m_options.coreOptionsFileName = Options.GetDefaultCoreOptionsFileName();
+            }
             if (m_options.loadProfileOnLoading)
                 m_coreOptions = CoreOptions.Load(m_options.coreOptionsFileName, m_core, m_options.onePath);
             else
@@ -72,6 +82,11 @@ namespace AntiDupl.NET.WinForms
                 m_options.LoadProblem.Show(null);
             if (m_coreOptions.LoadProblem != null)
                 m_coreOptions.LoadProblem.Show(null);
+            if (releaseProfile != null)
+                MessageBox.Show(string.Format("The settings named the profile {0}, which belongs to the AntiDupl in {1}. " +
+                    "This copy uses {2} instead and leaves that one alone.", releaseProfile,
+                    Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(releaseProfile))), m_options.coreOptionsFileName),
+                    Resources.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             UseCommandLineFolders(commandLine);
 
             StartFinishForm startFinishForm = new StartFinishForm(m_core, m_options);

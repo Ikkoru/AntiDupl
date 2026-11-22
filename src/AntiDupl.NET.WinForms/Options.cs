@@ -261,6 +261,29 @@ namespace AntiDupl.NET.WinForms
             return string.Format("{0}\\default.xml", Resources.ProfilesPath);
         }
 
+        /// <summary>
+        /// Whether a file lies in the release's settings folder
+        /// (%LOCALAPPDATA%\AntiDupl.NET) while this copy keeps its settings
+        /// elsewhere. ANTIDUPL_RELEASE_SETTINGS names another folder to guard,
+        /// so a check can prove this on a scratch folder, not the real one.
+        /// </summary>
+        static public bool InReleaseSettings(string fileName)
+        {
+            string release = (Environment.GetEnvironmentVariable("ANTIDUPL_RELEASE_SETTINGS") ??
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AntiDupl.NET")) +
+                Path.DirectorySeparatorChar;
+            try
+            {
+                string file = Path.GetFullPath(fileName);
+                string user = Path.GetFullPath(Resources.UserPath) + Path.DirectorySeparatorChar;
+                return file.StartsWith(release, StringComparison.OrdinalIgnoreCase) && !user.StartsWith(release, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         public bool Equals(Options options)
         {
             if (checkingForUpdates != options.checkingForUpdates)
