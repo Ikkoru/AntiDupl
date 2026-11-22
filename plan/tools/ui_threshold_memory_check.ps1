@@ -69,6 +69,27 @@ Start-Sleep -Seconds 1
 Check 'dialog, Set default' "$(Get-AdListValue $dAlgorithm) / $(Get-AdListValue $dThreshold)" 'Mean square difference / 5 %'
 Send-AdButton $dialog 'Cancel'
 Start-Sleep -Seconds 1
+
+# --- the option off: switching sets the algorithm's default (builds with
+# the option only)
+$dialog = Open-AdOptions $p $main
+$remember = $dialog.FindFirst($TS::Descendants, (New-AdCondition $AE::NameProperty 'Remember the threshold of each algorithm'))
+if ($remember) {
+    $toggle = $remember.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
+    Check 'option on by default' "$($toggle.Current.ToggleState)" 'On'
+    $toggle.Toggle()
+    Send-AdButton $dialog 'OK'
+    Start-Sleep -Seconds 2
+    $algorithm, $threshold = ToolBarLists $main
+    Select-AdListItem $algorithm 'Local colour difference'
+    Check 'option off, tool bar: local colour at its default' $threshold.Current.Name '4 %'
+    Select-AdListItem $algorithm 'SSIM'
+    Check 'option off, tool bar: SSIM at its default' $threshold.Current.Name '20 %'
+} else {
+    Send-AdButton $dialog 'Cancel'
+    'skip the option checks: this build has no Remember the threshold of each algorithm'
+}
+Start-Sleep -Seconds 1
 Stop-AdBuild $p $main
 } finally { Stop-AdStrays }
 

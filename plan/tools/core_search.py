@@ -31,6 +31,9 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
             not decode are AD_DEFECT_UNKNOWN), and for every image in a result
             its type, size and non-empty EXIF fields
 --collect-threads  number of threads that decode images (timing)
+--cache-mb N  the memory Butteraugli keeps decoded images in, MB (a core
+            with the advanced option ButteraugliCacheSize; exits when the
+            core doesn't keep N)
 --transformed      also search rotated and mirrored copies ("Search rotated
             and mirror image dupls")
 --images FILE      also write every image that is in a result, with the
@@ -139,7 +142,12 @@ class AdvancedOptions(ctypes.Structure):
                 ("ratioResolution", ctypes.c_int32), ("compareThreadCount", ctypes.c_int32),
                 ("collectThreadCount", ctypes.c_int32), ("reducedImageSize", ctypes.c_int32),
                 ("undoQueueSize", ctypes.c_int32), ("resultCountMax", ctypes.c_int32),
-                ("ignoreFrameWidth", ctypes.c_int32), ("useLibJpegTurbo", ctypes.c_int32)]
+                ("ignoreFrameWidth", ctypes.c_int32), ("useLibJpegTurbo", ctypes.c_int32),
+                # Cores before the setting don't have it and leave it alone.
+                ("butteraugliCacheSize", ctypes.c_int32),
+                # Room for fields a later core adds: adOptionsGet writes its
+                # whole struct, and a shorter buffer here would be overrun.
+                ("spare", ctypes.c_int32 * 16)]
 
 
 class ExifInfoW(ctypes.Structure):
@@ -244,6 +252,7 @@ def main():
     ap.add_argument("--size", type=int, default=32)
     ap.add_argument("--threshold", type=float, default=1)
     ap.add_argument("--turbo", type=int, default=1)
+    ap.add_argument("--cache-mb", type=int)
     ap.add_argument("--algorithm", type=int, default=1)
     ap.add_argument("--runs", type=int, default=1)
     ap.add_argument("--use-db", action="store_true")
@@ -360,7 +369,15 @@ def main():
         adv.ignoreFrameWidth = a.frame
         if a.collect_threads is not None:
             adv.collectThreadCount = a.collect_threads
+        if a.cache_mb is not None:
+            adv.butteraugliCacheSize = a.cache_mb
         assert core.adOptionsSet(h, AD_OPTIONS_ADVANCED, ctypes.byref(adv)) == 0
+        if a.cache_mb is not None:
+            back_adv = AdvancedOptions()
+            core.adOptionsGet(h, AD_OPTIONS_ADVANCED, ctypes.byref(back_adv))
+            if back_adv.butteraugliCacheSize != a.cache_mb:
+                sys.exit(f"the core keeps a cache of {back_adv.butteraugliCacheSize} MB, not {a.cache_mb}: "
+                         "out of its range, or a core without the setting")
 
         bufs = ((ctypes.c_wchar * (MAX_PATH_EX + 1)) * len(a.search_dir))()
         for buf, folder in zip(bufs, a.search_dir):
