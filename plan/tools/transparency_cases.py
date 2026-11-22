@@ -79,7 +79,9 @@ UNTURNED = {"disjoint", "shared-strip"}
 # 0.00: a turned image has no pixel hash.
 IDENTICAL = {"hidden-colour", "bmp-unused-alpha"}
 IDENTICAL_MAX = 0.00001
-ALGORITHMS = [("mean square", "0", "20"), ("SSIM", "1", "30"), ("local colour", "3", "30")]
+# Mean square at 10: the core resets one over 15 (adOptions.cpp), and at 15 a
+# masked pair of different drawings on one pattern scores 12.9.
+ALGORITHMS = [("mean square", "0", "10"), ("SSIM", "1", "30"), ("local colour", "3", "30")]
 # With --butteraugli, for builds that have them: at their default at 768 px.
 BUTTERAUGLI = [("Butteraugli", "4", "12"), ("aligned", "5", "12")]
 
