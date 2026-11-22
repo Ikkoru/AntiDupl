@@ -146,6 +146,7 @@ namespace ad
         bool Fresh(TUInt32 day) const { return day >= m_today || m_today - day <= BUTTERAUGLI_STORE_DAYS; }
         void LoadKeypoints(TEngine *pEngine);
         void SaveKeypoints() const;
+        static size_t CacheBytes(const TOptions * pOptions);
         void Decode(TImageDataPtr pImageData, TWorkImage & image) const;
         std::unique_ptr<TView> ToWorkImage(const TView & view) const;
         double Compute(const TView & first, const TView & second, adTransformType transform) const;
@@ -160,6 +161,7 @@ namespace ad
         std::unordered_map<TImageDataPtr, TCached> m_images;
         std::list<TImageDataPtr> m_uses; // the most recently used first
         size_t m_imageBytes;
+        const size_t m_cacheBytes;
         std::unordered_map<TKey, TStoredScore, TKeyHash> m_scores;
         bool m_changed;
         TString m_keypointPath;
