@@ -21,6 +21,7 @@
 */
 #include <math.h>
 #include <fstream>
+#include <unordered_set>
 
 // libjxl's Butteraugli, compiled into the static jxl.lib, with headers the
 // overlay port src/ports/libjxl installs. Its headers turn their debug
@@ -49,9 +50,27 @@
 namespace ad
 {
     // The stored scores' file: this signature, the format and score
-    // versions, the record count, then TKey and score pairs.
+    // versions, the record count, then TKey, score and day records (the
+    // day the score was last used; format 1 had none).
     static const TUInt32 SCORE_FILE_SIGNATURE = 0x53424441; // "ADBS"
-    static const TUInt32 SCORE_FILE_FORMAT = 1;
+    static const TUInt32 SCORE_FILE_FORMAT = 2;
+    // The stored keypoints' file: this signature, the format and
+    // ALIGN_KEYPOINTS_VERSION, then a TKeypointRecord and its points' x, y
+    // (float) and descriptions (KEYPOINT_WORDS words) per file, to the end.
+    static const TUInt32 KEYPOINT_FILE_SIGNATURE = 0x4B424441; // "ADBK"
+    static const TUInt32 KEYPOINT_FILE_FORMAT = 1;
+    static const size_t KEYPOINT_BYTES = 2 * sizeof(float) + KEYPOINT_WORDS * sizeof(uint64_t);
+
+    // Days since 1601, by the system clock.
+    static TUInt32 Today()
+    {
+        FILETIME time;
+        ::GetSystemTimeAsFileTime(&time);
+        ULARGE_INTEGER t;
+        t.LowPart = time.dwLowDateTime;
+        t.HighPart = time.dwHighDateTime;
+        return TUInt32(t.QuadPart / 864000000000ULL);
+    }
 
     // Butteraugli wants linear light, 1.0 for white, which it takes to be
     // shown at BUTTERAUGLI_INTENSITY_TARGET.
@@ -198,17 +217,23 @@ namespace ad
         , m_path(pEngine->UserPath() + TEXT("\\butteraugli.adp"))
         , m_imageBytes(0)
         , m_changed(false)
+        , m_keypointPath(pEngine->UserPath() + TEXT("\\keypoints.adk"))
+        , m_today(Today())
     {
         static_assert(sizeof(TKey) == 40, "TKey is written to the file as it is");
         if (m_pOptions->compare.algorithmComparing == AD_COMPARING_BUTTERAUGLI_ALIGNED)
             m_pIndex.reset(new TKeypointIndex(imageCount, ALIGN_INDEX_KEY_ENTRIES_MAX, ALIGN_INDEX_HITS_MIN));
         Load();
+        if (m_pIndex)
+            LoadKeypoints(pEngine);
     }
 
     TButteraugliStore::~TButteraugliStore()
     {
         if (m_changed)
             Save();
+        if (m_pIndex)
+            SaveKeypoints();
     }
 
     size_t TButteraugliStore::TWorkImage::Bytes() const
@@ -264,7 +289,11 @@ namespace ad
             std::lock_guard<std::mutex> lock(m_mutex);
             auto it = m_scores.find(key);
             if (it != m_scores.end())
-                return it->second;
+            {
+                it->second.day = m_today;
+                m_changed = true;
+                return it->second.score;
+            }
         }
 
         TWorkImagePtr first = Image(pFirst), second = Image(pSecond);
@@ -276,7 +305,7 @@ namespace ad
         if (keyed && score >= 0)
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            m_scores[key] = score;
+            m_scores[key] = TStoredScore{ score, m_today };
             m_changed = true;
         }
         return score;
@@ -337,6 +366,31 @@ namespace ad
         ImageKeypoints(gray, *keypoints);
         std::lock_guard<std::mutex> lock(m_keypointMutex);
         m_keypoints[pImageData] = keypoints;
+        if (pImageData->crc32c != 0 && pImageData->crc32c != TUInt32(-1))
+            m_storedKeypoints[KeypointKey(pImageData)] = TStoredKeypoints{ keypoints, m_today };
+    }
+
+    bool TButteraugliStore::StoredKeypoints(TImageDataPtr pImageData)
+    {
+        // 0 is a CRC not computed, and -1 one the file couldn't be read for.
+        if (pImageData->crc32c == 0 || pImageData->crc32c == TUInt32(-1))
+            return false;
+        std::lock_guard<std::mutex> lock(m_keypointMutex);
+        auto it = m_storedKeypoints.find(KeypointKey(pImageData));
+        if (it == m_storedKeypoints.end())
+            return false;
+        it->second.day = m_today;
+        m_keypoints[pImageData] = it->second.keypoints;
+        return true;
+    }
+
+    TButteraugliStore::TKeypointKey TButteraugliStore::KeypointKey(TImageDataPtr pImageData) const
+    {
+        TKeypointKey key;
+        key.crc = pImageData->crc32c;
+        key.shown = m_pOptions->compare.transparentAsShown == TRUE ? 1 : 0;
+        key.size = pImageData->size;
+        return key;
     }
 
     std::shared_ptr<const TKeypoints> TButteraugliStore::Keypoints(TImageDataPtr pImageData)
@@ -382,7 +436,11 @@ namespace ad
             std::lock_guard<std::mutex> lock(m_mutex);
             auto it = m_scores.find(key);
             if (it != m_scores.end())
-                return it->second;
+            {
+                it->second.day = m_today;
+                m_changed = true;
+                return it->second.score;
+            }
         }
 
         // Most candidates end here, and matching them again costs less than
@@ -406,7 +464,7 @@ namespace ad
         if (keyed)
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            m_scores[key] = score;
+            m_scores[key] = TStoredScore{ score, m_today };
             m_changed = true;
         }
         return score;
@@ -680,19 +738,21 @@ namespace ad
         TUInt64 count = 0;
         file.read((char*)header, sizeof(header));
         file.read((char*)&count, sizeof(count));
-        if (!file || header[0] != SCORE_FILE_SIGNATURE || header[1] != SCORE_FILE_FORMAT ||
+        if (!file || header[0] != SCORE_FILE_SIGNATURE || (header[1] != 1 && header[1] != SCORE_FILE_FORMAT) ||
             header[2] != BUTTERAUGLI_SCORE_VERSION)
             return;
         m_scores.reserve((size_t)count);
         for (TUInt64 i = 0; i < count; ++i)
         {
             TKey key;
-            double score;
+            TStoredScore stored = { 0, m_today }; // format 1: as if used today
             file.read((char*)&key, sizeof(key));
-            file.read((char*)&score, sizeof(score));
+            file.read((char*)&stored.score, sizeof(stored.score));
+            if (header[1] == SCORE_FILE_FORMAT)
+                file.read((char*)&stored.day, sizeof(stored.day));
             if (!file)
                 break;
-            m_scores[key] = score;
+            m_scores[key] = stored;
         }
     }
 
@@ -706,18 +766,120 @@ namespace ad
             if (!file)
                 return;
             const TUInt32 header[3] = { SCORE_FILE_SIGNATURE, SCORE_FILE_FORMAT, BUTTERAUGLI_SCORE_VERSION };
-            const TUInt64 count = m_scores.size();
+            TUInt64 count = 0;
+            for (auto & entry : m_scores)
+                count += Fresh(entry.second.day) ? 1 : 0;
             file.write((const char*)header, sizeof(header));
             file.write((const char*)&count, sizeof(count));
             for (auto & entry : m_scores)
             {
+                if (!Fresh(entry.second.day))
+                    continue;
                 file.write((const char*)&entry.first, sizeof(entry.first));
-                file.write((const char*)&entry.second, sizeof(entry.second));
+                file.write((const char*)&entry.second.score, sizeof(entry.second.score));
+                file.write((const char*)&entry.second.day, sizeof(entry.second.day));
             }
             if (!file)
                 return;
         }
         ::MoveFileEx(temporary.c_str(), m_path.c_str(), MOVEFILE_REPLACE_EXISTING);
+    }
+
+    // One file's keypoints in the keypoints' file, before its points.
+    struct TKeypointRecord
+    {
+        TUInt32 crc, shown;
+        TUInt64 size;
+        TUInt32 day, width, height, count;
+    };
+    static_assert(sizeof(TKeypointRecord) == 32, "TKeypointRecord is written to the file as it is");
+
+    // Only the entries of files the size of one of this search's images: the
+    // file holds every image searched within BUTTERAUGLI_STORE_DAYS.
+    void TButteraugliStore::LoadKeypoints(TEngine *pEngine)
+    {
+        std::unordered_set<TUInt64> sizes;
+        for (TImageDataPtr pImageData : *pEngine->ImageDataPtrs())
+            sizes.insert(pImageData->size);
+        std::ifstream file(m_keypointPath.c_str(), std::ios::binary);
+        if (!file)
+            return;
+        TUInt32 header[3] = { 0 };
+        file.read((char*)header, sizeof(header));
+        if (!file || header[0] != KEYPOINT_FILE_SIGNATURE || header[1] != KEYPOINT_FILE_FORMAT ||
+            header[2] != ALIGN_KEYPOINTS_VERSION)
+            return;
+        TKeypointRecord record;
+        while (file.read((char*)&record, sizeof(record)))
+        {
+            const size_t n = record.count;
+            if (sizes.count(record.size) == 0)
+            {
+                file.seekg(std::streamoff(n * KEYPOINT_BYTES), std::ios::cur);
+                continue;
+            }
+            std::shared_ptr<TKeypoints> keypoints = std::make_shared<TKeypoints>();
+            keypoints->width = record.width;
+            keypoints->height = record.height;
+            keypoints->x.resize(n);
+            keypoints->y.resize(n);
+            keypoints->bits.resize(n * KEYPOINT_WORDS);
+            file.read((char*)keypoints->x.data(), n * sizeof(float));
+            file.read((char*)keypoints->y.data(), n * sizeof(float));
+            file.read((char*)keypoints->bits.data(), n * KEYPOINT_WORDS * sizeof(uint64_t));
+            if (!file)
+                break;
+            const TKeypointKey key = { record.crc, record.shown, record.size };
+            m_storedKeypoints[key] = TStoredKeypoints{ keypoints, record.day };
+        }
+    }
+
+    // The old file's entries of other images while fresh, then this search's,
+    // to a temporary file that then replaces the old one.
+    void TButteraugliStore::SaveKeypoints() const
+    {
+        const TString temporary = m_keypointPath + TEXT(".tmp");
+        {
+            std::ofstream out(temporary.c_str(), std::ios::binary | std::ios::trunc);
+            if (!out)
+                return;
+            const TUInt32 header[3] = { KEYPOINT_FILE_SIGNATURE, KEYPOINT_FILE_FORMAT, ALIGN_KEYPOINTS_VERSION };
+            out.write((const char*)header, sizeof(header));
+            std::ifstream in(m_keypointPath.c_str(), std::ios::binary);
+            TUInt32 old[3] = { 0 };
+            if (in && in.read((char*)old, sizeof(old)) && old[0] == KEYPOINT_FILE_SIGNATURE &&
+                old[1] == KEYPOINT_FILE_FORMAT && old[2] == ALIGN_KEYPOINTS_VERSION)
+            {
+                TKeypointRecord record;
+                std::vector<char> points;
+                while (in.read((char*)&record, sizeof(record)))
+                {
+                    points.resize(record.count * KEYPOINT_BYTES);
+                    if (!in.read(points.data(), points.size()))
+                        break;
+                    const TKeypointKey key = { record.crc, record.shown, record.size };
+                    if (m_storedKeypoints.count(key) || !Fresh(record.day))
+                        continue;
+                    out.write((const char*)&record, sizeof(record));
+                    out.write(points.data(), points.size());
+                }
+            }
+            for (auto & entry : m_storedKeypoints)
+            {
+                if (!Fresh(entry.second.day))
+                    continue;
+                const TKeypoints & k = *entry.second.keypoints;
+                const TKeypointRecord record = { entry.first.crc, entry.first.shown, entry.first.size,
+                    entry.second.day, TUInt32(k.width), TUInt32(k.height), TUInt32(k.Size()) };
+                out.write((const char*)&record, sizeof(record));
+                out.write((const char*)k.x.data(), k.Size() * sizeof(float));
+                out.write((const char*)k.y.data(), k.Size() * sizeof(float));
+                out.write((const char*)k.bits.data(), k.Size() * KEYPOINT_WORDS * sizeof(uint64_t));
+            }
+            if (!out)
+                return;
+        }
+        ::MoveFileEx(temporary.c_str(), m_keypointPath.c_str(), MOVEFILE_REPLACE_EXISTING);
     }
     //-------------------------------------------------------------------------
 }

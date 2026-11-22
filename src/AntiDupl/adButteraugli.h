@@ -69,6 +69,11 @@ namespace ad
         // An image's keypoints, from its grey pixels at full size.
         void SetKeypoints(TImageDataPtr pImageData, const TView & gray);
 
+        // Takes an image's keypoints from an earlier search, kept in the
+        // keypoints' file; false when there are none, and then they take
+        // decoding the image (SetKeypoints).
+        bool StoredKeypoints(TImageDataPtr pImageData);
+
         // The images given here before that share many keypoints with this
         // one, which then joins them: of any two, the later finds the earlier.
         void Candidates(TImageDataPtr pImageData, std::vector<TImageDataPtr> & candidates);
@@ -115,6 +120,32 @@ namespace ad
         TWorkImagePtr Image(TImageDataPtr pImageData);
         static const TView & Shown(const TWorkImage & image, const TBackground & background, TView & blend);
         TKey Key(TImageDataPtr pFirst, TImageDataPtr pSecond, adTransformType transform, TInt32 version, const TBackground & background) const;
+        struct TStoredScore
+        {
+            double score;
+            TUInt32 day; // last used, in days since 1601
+        };
+        // A file's keypoints in the keypoints' file: by its checksum and
+        // size, and whether they are of the picture as shown over white.
+        struct TKeypointKey
+        {
+            TUInt32 crc, shown;
+            TUInt64 size;
+            bool operator==(const TKeypointKey & key) const { return crc == key.crc && shown == key.shown && size == key.size; }
+        };
+        struct TKeypointKeyHash
+        {
+            size_t operator()(const TKeypointKey & key) const { return size_t(key.crc) ^ (size_t(key.size) << 1) ^ key.shown; }
+        };
+        struct TStoredKeypoints
+        {
+            std::shared_ptr<const TKeypoints> keypoints;
+            TUInt32 day;
+        };
+        TKeypointKey KeypointKey(TImageDataPtr pImageData) const;
+        bool Fresh(TUInt32 day) const { return day >= m_today || m_today - day <= BUTTERAUGLI_STORE_DAYS; }
+        void LoadKeypoints(TEngine *pEngine);
+        void SaveKeypoints() const;
         void Decode(TImageDataPtr pImageData, TWorkImage & image) const;
         std::unique_ptr<TView> ToWorkImage(const TView & view) const;
         double Compute(const TView & first, const TView & second, adTransformType transform) const;
@@ -129,11 +160,16 @@ namespace ad
         std::unordered_map<TImageDataPtr, TCached> m_images;
         std::list<TImageDataPtr> m_uses; // the most recently used first
         size_t m_imageBytes;
-        std::unordered_map<TKey, double, TKeyHash> m_scores;
+        std::unordered_map<TKey, TStoredScore, TKeyHash> m_scores;
         bool m_changed;
+        TString m_keypointPath;
+        TUInt32 m_today;
 
         std::mutex m_keypointMutex;
         std::unordered_map<TImageDataPtr, std::shared_ptr<const TKeypoints>> m_keypoints;
+        // The keypoints' file's entries for this search's images (by size,
+        // read once), and those found in it; written back when it ends.
+        std::unordered_map<TKeypointKey, TStoredKeypoints, TKeypointKeyHash> m_storedKeypoints;
         std::mutex m_indexMutex;
         std::unique_ptr<TKeypointIndex> m_pIndex; // NULL but in the aligned search
         std::vector<TImageDataPtr> m_indexed; // by the index's image numbers
