@@ -40,7 +40,7 @@ try {
     Start-Sleep -Milliseconds 700
     $edit = Edit-Of $dialog $Label
     $other = Edit-Of $dialog 'Maximal count of results'
-    Check 'starts at the default' (Get-Text $edit) '512'
+    Check 'starts at the default' (Get-Text $edit) '1024'
 
     Set-Text $edit ''
     Check 'emptied, while focused' (Get-Text $edit) ''
