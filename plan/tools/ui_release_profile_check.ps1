@@ -29,19 +29,19 @@ if (-not $Unguarded) { $env:ANTIDUPL_RELEASE_SETTINGS = $release }
 try {
     $p = Start-Process -FilePath $Exe -ArgumentList '-s', "`"$settings`"" -PassThru
     $script:AdStarted.Add($p)
-    # The message comes before the main window, from the form's constructor.
+    # The message shows while the main window starts, over it or before it:
+    # look for it the whole while rather than stopping at the main window.
     $byPid = New-AdCondition $AE::ProcessIdProperty $p.Id
     $message = $null
-    $deadline = (Get-Date).AddSeconds(30)
+    $deadline = (Get-Date).AddSeconds(25)
     while (-not $message -and (Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 700
         try {
-            $message = @($AE::RootElement.FindAll($TS::Children, $byPid)) | Where-Object {
-                @($_.FindAll($TS::Descendants, (New-AdCondition $AE::ControlTypeProperty $CT::Text)) |
-                    Where-Object { $_.Current.Name -like '*belongs to the AntiDupl*' }).Count -gt 0
-            } | Select-Object -First 1
-            if (-not $message -and @($AE::RootElement.FindAll($TS::Children, $byPid) |
-                Where-Object { $_.FindFirst($TS::Children, (New-AdCondition $AE::ControlTypeProperty $CT::ToolBar)) }).Count) { break }
+            $message = @($AE::RootElement.FindAll($TS::Descendants, $byPid)) |
+                Where-Object { $_.Current.ControlType -eq $CT::Window } | Where-Object {
+                    @($_.FindAll($TS::Descendants, (New-AdCondition $AE::ControlTypeProperty $CT::Text)) |
+                        Where-Object { $_.Current.Name -like '*belongs to the AntiDupl*' }).Count -gt 0
+                } | Select-Object -First 1
         } catch {}
     }
     Check 'a message says the profile belongs to the release' ($null -ne $message)
