@@ -55,6 +55,9 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
             colour under transparent pixels counts, as before the option
 --ignore-transparent  turns on "Ignore areas with transparency in both
             images" (off in a fresh engine; needs the option above on)
+--aligned-level N  the aligned search's keypoint level, 1 and up, or 0 for
+            Auto, the highest that fits in memory (a fresh engine's); builds
+            with levels print the level used and its memory with --details
 --tsv FILE  also writes the pairs to FILE in UTF-8: difference, transform,
             first and second path (the printed names lose what isn't ASCII)
 --drop-same-name  takes the pairs whose two files have the same name,
@@ -150,6 +153,11 @@ class AdvancedOptions(ctypes.Structure):
                 # Room for fields a later core adds: adOptionsGet writes its
                 # whole struct, and a shorter buffer here would be overrun.
                 ("spare", ctypes.c_int32 * 16)]
+
+
+class AlignedMemory(ctypes.Structure):
+    _fields_ = [("wanted", ctypes.c_int32), ("used", ctypes.c_int32), ("wantedBytes", ctypes.c_uint64),
+                ("usedBytes", ctypes.c_uint64), ("freeBytes", ctypes.c_uint64), ("imageCount", ctypes.c_uint64)]
 
 
 class ExifInfoW(ctypes.Structure):
@@ -273,6 +281,7 @@ def main():
     ap.add_argument("--max-size", type=int)
     ap.add_argument("--alpha-ignored", action="store_true")
     ap.add_argument("--ignore-transparent", action="store_true")
+    ap.add_argument("--aligned-level", type=int)
     ap.add_argument("--drop-same-name", action="store_true")
     ap.add_argument("--save-results")
     ap.add_argument("--drop-pairs")
@@ -351,6 +360,8 @@ def main():
             flag.value = 0
         if a.ignore_transparent:
             ctypes.c_int32.from_buffer(cmp_buf, hardlinks + 8).value = 1
+        if a.aligned_level is not None:
+            ctypes.c_int32.from_buffer(cmp_buf, hardlinks + 12).value = a.aligned_level
         if a.butteraugli_size is not None:
             size = ctypes.c_int32.from_buffer(cmp_buf, BUTTERAUGLI_SIZE_OFFSET)
             if not isinstance(cmp_, DOUBLE_LAYOUTS) or size.value not in BUTTERAUGLI_SIZES:
@@ -362,6 +373,8 @@ def main():
         # searches at 5, and the results look like a real run's.
         back = (ctypes.c_byte * len(cmp_buf))()
         core.adOptionsGet(h, AD_OPTIONS_COMPARE, back)
+        if a.aligned_level is not None and ctypes.c_int32.from_buffer(back, hardlinks + 12).value != a.aligned_level:
+            sys.exit("this build has no aligned level, or the level is out of its range")
         if bytes(back) != bytes(cmp_buf):
             sys.exit("the core reset a compare option out of its range (the threshold goes to 50 at most)")
         adv = AdvancedOptions()
@@ -408,6 +421,13 @@ def main():
                 sys.exit(f"adSearch error {err}")
             if a.details:
                 print(f"search took {time.perf_counter() - t0:.3f} s")
+                if hasattr(core, "adAlignedMemoryGet"):
+                    memory = AlignedMemory()
+                    core.adAlignedMemoryGet(ctypes.c_void_p(h), ctypes.byref(memory))
+                    if memory.used:
+                        print(f"aligned level {memory.used} (wanted {memory.wanted}), {memory.imageCount} images: keypoints up to "
+                              f"{memory.usedBytes / 2**20:.0f} MB ({memory.wantedBytes / 2**20:.0f} MB wanted), "
+                              f"{memory.freeBytes / 2**20:.0f} MB free for them")
             # As the GUI does after a search. NOT optional for a saved list:
             # a pair without a group fails the core's check when the results
             # file loads (invalid file format), and the GUI then shows none.
