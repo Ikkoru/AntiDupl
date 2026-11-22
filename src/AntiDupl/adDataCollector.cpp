@@ -383,6 +383,9 @@ namespace ad
     void TDataCollector::FillKeypoints(TImageData* pImageData)
     {
         AD_FUNCTION_PERFORMANCE_TEST
+        // From an earlier search: no decoding.
+        if(m_pKeypointStore->StoredKeypoints(pImageData))
+            return;
         TImage *pImage = TImage::Load(pImageData->hGlobal, m_pOptions);
         if(pImage)
         {

@@ -159,6 +159,14 @@ namespace ad
     const double ALIGN_STRETCH_TOLERANCE = 0.25;
     // Part of an aligned score's key, as BUTTERAUGLI_SCORE_VERSION is of all.
     const TInt32 ALIGNED_SCORE_VERSION = 1;
+    // Part of the stored keypoints' file: a change to how keypoints are
+    // found (ALIGN_IMAGE_AREA, ALIGN_KEYPOINTS_MAX, the detector) makes the
+    // stored ones stale.
+    const TUInt32 ALIGN_KEYPOINTS_VERSION = 1;
+    // Stored scores and keypoints not used for this many days are dropped
+    // when they are saved: those of files gone, or of folders not searched
+    // since, so that the files don't grow without end.
+    const TUInt32 BUTTERAUGLI_STORE_DAYS = 365;
     // Transparency shown: when could an opaque image be a copy of one with
     // transparency, its transparent area filled with one colour
     // (TImageComparer::UniformFill). Pixels of the colour thumbnail count as

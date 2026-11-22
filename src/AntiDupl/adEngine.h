@@ -79,6 +79,7 @@ namespace ad
         TStatus* Status() {return m_pStatus;}
         TOptions* Options() {return m_pOptions;};
         TImageDataStorage* ImageDataStorage() {return m_pImageDataStorage;}
+        TImageDataPtrs* ImageDataPtrs() {return m_pImageDataPtrs;}
         TMistakeStorage* MistakeStorage() {return m_pMistakeStorage;}
         TResultStorage* Result() {return m_pResult;}
         TCriticalSection* CriticalSection() {return m_pCriticalSection;}
