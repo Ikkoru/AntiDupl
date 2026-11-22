@@ -1,12 +1,12 @@
 # The Options dialog's whole-number boxes (LabeledIntegerEdit), on Advanced
-# -> RAM limit for Butteraugli's images, MB: the text is checked when focus
+# -> RAM limit for Butteraugli's images, MB (0: none): the text is checked when focus
 # leaves the box, not on every key. Emptied or invalid text stays while the
 # box has focus; on leaving, a valid number written with group separators
 # (16,384 / 16.384) is rewritten plainly, and an invalid or out-of-range one
 # gives way to the last valid value. OK saves the value. Prints ok/FAIL per
 # check and PASS or FAIL at the end.
 #   pwsh -File ui_integer_edit_check.ps1 -Exe <bin\Release\AntiDupl.NET.WinForms.exe> -s <new scratch folder>
-param([string]$Exe, [string]$s, [string]$Label = "RAM limit for Butteraugli's images, MB")
+param([string]$Exe, [string]$s, [string]$Label = "RAM limit for Butteraugli's images, MB (0: none)", [string]$Default = '0')
 . (Join-Path $PSScriptRoot 'ui_automation.ps1')
 $script:failures = 0
 function Check([string]$what, [string]$got, [string]$expected) {
@@ -40,7 +40,7 @@ try {
     Start-Sleep -Milliseconds 700
     $edit = Edit-Of $dialog $Label
     $other = Edit-Of $dialog 'Maximal count of results'
-    Check 'starts at the default' (Get-Text $edit) '1024'
+    Check 'starts at the default' (Get-Text $edit) $Default
 
     Set-Text $edit ''
     Check 'emptied, while focused' (Get-Text $edit) ''
