@@ -17,7 +17,7 @@ param([string]$Exe, [string]$s, [string]$Many, [string]$Shots)
 . (Join-Path $PSScriptRoot 'ui_automation.ps1')
 $Aligned = 'Aligned perceptual (crops, shifts)'
 $Auto = 'Auto: as small as memory allows'
-$Highest = '1/50 of the picture, 4 GB / 10,000 images'
+$Highest = '1/50 of image, 4 GB / 10,000 files'
 $WarningTitle = 'Not enough memory for the smallest crops'
 function Show-Check([bool]$ok, [string]$text) { '{0} {1}' -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $text }
 
@@ -99,14 +99,14 @@ function Test-AdWarning([string]$label, [string]$expected) {
     $running = Test-AdSearching $p
     Show-Check $running "($label) the search runs meanwhile"
     if (-not $running) { "  windows: $script:AdWindowNames"; Stop-Process -Id $p.Id; return }
-    $stop = Get-AdWarningButton $warning 'Stop the search'
+    $stop = Get-AdWarningButton $warning 'Stop search'
     [AdUiNative]::PostMessage([IntPtr]$stop.Current.NativeWindowHandle, 0x00F5, [IntPtr]0, [IntPtr]0) | Out-Null
     $ended = $false
     for ($i = 0; $i -lt 120 -and -not $ended; $i++) { Start-Sleep -Seconds 1; $ended = -not (Test-AdSearching $p) }
     Show-Check $ended "($label) its Stop button stops the search"
     Start-Sleep -Seconds 2
     $still = $false; $stopOff = $false
-    try { $still = $warning.Current.Name -eq $WarningTitle; $stopOff = -not (Get-AdWarningButton $warning 'Stop the search').Current.IsEnabled } catch {}
+    try { $still = $warning.Current.Name -eq $WarningTitle; $stopOff = -not (Get-AdWarningButton $warning 'Stop search').Current.IsEnabled } catch {}
     Show-Check ($still -and $stopOff) "($label) the warning stays once the search has ended, its Stop button off"
     $close = Get-AdWarningButton $warning 'Close'
     [AdUiNative]::PostMessage([IntPtr]$close.Current.NativeWindowHandle, 0x00F5, [IntPtr]0, [IntPtr]0) | Out-Null
@@ -144,8 +144,16 @@ try {
         $level = Find-AdLevelList
         Show-Check ($level.Current.IsEnabled) "(1) enabled for the aligned search"
         Show-Check ((Get-AdListValue $level) -eq $Auto) "(1) Auto in a fresh profile: '$(Get-AdListValue $level)'"
+        if ($Shots) {
+            # Every item, closed, as the list shows it: the longest must fit.
+            $n = 0
+            foreach ($item in Get-AdListItems $level) {
+                Select-AdListItem $level $item
+                Save-AdWindowPicture $dialog (Join-Path $Shots "options-advanced-$n.png")
+                $n++
+            }
+        }
         Select-AdListItem $level $Highest
-        if ($Shots) { Save-AdWindowPicture $dialog (Join-Path $Shots 'options-advanced.png') }
     }
     Send-AdButton $dialog 'OK'
     Start-Sleep -Seconds 2
@@ -154,9 +162,9 @@ try {
     $saved = ([xml](Get-Content -LiteralPath $profile.FullName -Raw -Encoding utf8)).SelectSingleNode('//compareOptions/alignedLevel').InnerText
     Show-Check ($saved -eq '3') "(2) the profile keeps level $saved"
 
-    Test-AdWarning 'forced' 'as set in Options > Advanced'
+    Test-AdWarning 'forced' 'Search will continue at your setting'
     Set-AdLevel 0
-    Test-AdWarning 'auto' 'The search is looking for crops down to about 1/10 of the picture instead'
+    Test-AdWarning 'auto' 'Searching for minimum crop size ~1/10 instead'
 } finally {
     Stop-AdStrays
 }
