@@ -17,7 +17,7 @@ param([string]$Exe, [string]$s, [string]$Many, [string]$Shots)
 . (Join-Path $PSScriptRoot 'ui_automation.ps1')
 $Aligned = 'Aligned perceptual (crops, shifts)'
 $Auto = 'Auto: as small as memory allows'
-$Highest = '1/50 of image, 4 GB / 10,000 files'
+$Highest = '1/50 of image, 4 GB per 10k files'
 $WarningTitle = 'Not enough memory for the smallest crops'
 function Show-Check([bool]$ok, [string]$text) { '{0} {1}' -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $text }
 
