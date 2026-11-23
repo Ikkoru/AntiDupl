@@ -1,14 +1,17 @@
-# Checks the aligned search's level setting and its memory warning in the
-# running program, in a new scratch settings folder (PowerShell 7). -Many is
-# a folder of so many pictures that the highest level's keypoints don't fit
-# in the free memory (many_images.py beside it makes one): the highest
-# level counts about 0.4 MB a picture against what is free, less a tenth of
-# all the memory (1 GB at least) and half a GB. (1) Options > Advanced offers the level
-# list, disabled but for the aligned search; (2) the profile keeps the level
-# chosen; (3) with the highest level set, a search of -Many shows the
-# warning as it starts, while it runs, with the text for a level kept
-# though it doesn't fit; its Stop button stops the search, and the warning
-# stays once the search has ended, its Stop button off; (4) with Auto, the
+# Checks the aligned search's level and time settings, its memory warning
+# and its progress line in the running program, in a new scratch settings
+# folder (PowerShell 7). -Many is a folder of so many pictures that the
+# highest level's keypoints don't fit in the free memory (many_images.py
+# beside it makes one): the highest level counts about 0.4 MB a picture
+# against what is free, less a tenth of all the memory (1 GB at least) and
+# half a GB. (1) Options > Advanced offers the level list and the time
+# limit, disabled but for the aligned search, the limit 15 minutes in a
+# fresh profile; (2) the profile keeps the level chosen and the limit;
+# (3) with the highest level set, a search of -Many shows the warning as it
+# starts, while it runs, with the text for a level kept though it doesn't
+# fit; its Stop button stops the search, and the warning stays once the
+# search has ended, its Stop button off; the search's window says the crop
+# size searched for and the time; (4) with Auto and no time limit, the
 # warning says the search looks for larger crops instead. -Shots names a
 # folder for pictures of the dialog and of each warning.
 # Prints one line per check, PASS or FAIL.
@@ -16,16 +19,19 @@
 param([string]$Exe, [string]$s, [string]$Many, [string]$Shots)
 . (Join-Path $PSScriptRoot 'ui_automation.ps1')
 $Aligned = 'Aligned perceptual (crops, shifts)'
-$Auto = 'Auto: as small as memory allows'
-$Highest = '1/50 of image, 4 GB per 10k files'
+$Auto = 'Auto: as small as memory and time allow'
+$Highest = '1/100 of image, 4.0 GB per 10k files'
+$TimeLimitLabel = 'Aligned search time limit, minutes (0 = none)'
 $WarningTitle = 'Not enough memory for the smallest crops'
 function Show-Check([bool]$ok, [string]$text) { '{0} {1}' -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $text }
 
-# Sets the profile's aligned level (both copies the profile keeps).
-function Set-AdLevel([int]$level) {
+# Sets a profile value of the aligned search (both copies the profile keeps,
+# the field's and the property's).
+function Set-AdAligned([string]$field, [int]$value) {
     $profile = Get-ChildItem -LiteralPath $s -Recurse -Filter default.xml | Select-Object -First 1
     $x = [xml](Get-Content -LiteralPath $profile.FullName -Raw -Encoding utf8)
-    foreach ($name in 'alignedLevel', 'AlignedLevel') { $x.SelectSingleNode("//compareOptions/$name").InnerText = "$level" }
+    $property = $field.Substring(0, 1).ToUpper() + $field.Substring(1)
+    foreach ($name in $field, $property) { $x.SelectSingleNode("//compareOptions/$name").InnerText = "$value" }
     $x.Save($profile.FullName)
 }
 
@@ -99,6 +105,8 @@ function Test-AdWarning([string]$label, [string]$expected) {
     $running = Test-AdSearching $p
     Show-Check $running "($label) the search runs meanwhile"
     if (-not $running) { "  windows: $script:AdWindowNames"; Stop-Process -Id $p.Id; return }
+    Show-Check ($script:AdWindowNames -like '*crops down to ~1/*, about * in all*') "($label) the search's window says the crop size and the time"
+    "  windows: $script:AdWindowNames"
     $stop = Get-AdWarningButton $warning 'Stop search'
     [AdUiNative]::PostMessage([IntPtr]$stop.Current.NativeWindowHandle, 0x00F5, [IntPtr]0, [IntPtr]0) | Out-Null
     $ended = $false
@@ -134,9 +142,21 @@ try {
     Select-AdTab 'Advanced'
     $level = Find-AdLevelList
     Show-Check ([bool]$level) "(1) Advanced offers the level list"
+    # The time limit's label, enabled with its box; the box's value.
+    function Find-AdTimeLimit() {
+        $dialog.FindFirst($TS::Descendants, (New-Object Windows.Automation.AndCondition(
+            (New-AdCondition $AE::NameProperty $TimeLimitLabel), (New-AdCondition $AE::ControlTypeProperty $CT::Text))))
+    }
+    function Get-AdTimeLimitValue() {
+        $edits = @($dialog.FindAll($TS::Descendants, (New-AdCondition $AE::ControlTypeProperty $CT::Edit)))
+        @($edits | ForEach-Object { $_.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value })
+    }
+    $limit = Find-AdTimeLimit
+    Show-Check ([bool]$limit) "(1) Advanced offers the time limit"
     if ($level) {
         "  items: $((Get-AdListItems $level) -join ' | ')"
         Show-Check (-not $level.Current.IsEnabled) "(1) disabled for '$before'"
+        if ($limit) { Show-Check (-not $limit.Current.IsEnabled) "(1) the time limit disabled for '$before'" }
         Select-AdTab 'Compare'
         $algorithm = Get-AdLists $dialog | Where-Object { (Get-AdListItems $_) -contains 'SSIM' } | Select-Object -First 1
         Select-AdListItem $algorithm $Aligned
@@ -144,6 +164,10 @@ try {
         $level = Find-AdLevelList
         Show-Check ($level.Current.IsEnabled) "(1) enabled for the aligned search"
         Show-Check ((Get-AdListValue $level) -eq $Auto) "(1) Auto in a fresh profile: '$(Get-AdListValue $level)'"
+        $limit = Find-AdTimeLimit
+        if ($limit) { Show-Check ($limit.Current.IsEnabled) "(1) the time limit enabled for the aligned search" }
+        $values = Get-AdTimeLimitValue
+        Show-Check ($values -contains '15') "(1) the time limit 15 in a fresh profile (boxes: $($values -join ', '))"
         if ($Shots) {
             # Every item, closed, as the list shows it: the longest must fit.
             $n = 0
@@ -159,12 +183,18 @@ try {
     Start-Sleep -Seconds 2
     Stop-AdBuild $p $main
     $profile = Get-ChildItem -LiteralPath $s -Recurse -Filter default.xml | Select-Object -First 1
-    $saved = ([xml](Get-Content -LiteralPath $profile.FullName -Raw -Encoding utf8)).SelectSingleNode('//compareOptions/alignedLevel').InnerText
-    Show-Check ($saved -eq '3') "(2) the profile keeps level $saved"
+    $x = [xml](Get-Content -LiteralPath $profile.FullName -Raw -Encoding utf8)
+    $saved = $x.SelectSingleNode('//compareOptions/alignedLevel').InnerText
+    Show-Check ($saved -eq '4') "(2) the profile keeps level $saved"
+    $savedLimit = $x.SelectSingleNode('//compareOptions/alignedTimeLimit').InnerText
+    Show-Check ($savedLimit -eq '15') "(2) the profile keeps the time limit $savedLimit"
 
     Test-AdWarning 'forced' 'Search will continue at your setting'
-    Set-AdLevel 0
-    Test-AdWarning 'auto' 'Searching for minimum crop size ~1/10 instead'
+    # With a time limit, Auto would want no more than the limit allows,
+    # which -Many keeps to the lowest level: no limit leaves memory to choose.
+    Set-AdAligned 'alignedLevel' 0
+    Set-AdAligned 'alignedTimeLimit' 0
+    Test-AdWarning 'auto' 'Searching for minimum crop size ~1/'
 } finally {
     Stop-AdStrays
 }

@@ -60,8 +60,11 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
 --ignore-transparent  turns on "Ignore areas with transparency in both
             images" (off in a fresh engine; needs the option above on)
 --aligned-level N  the aligned search's keypoint level, 1 and up, or 0 for
-            Auto, the highest that fits in memory (a fresh engine's); builds
-            with levels print the level used and its memory with --details
+            Auto, the highest that fits in memory and the time limit (a fresh
+            engine's); builds with levels print the level used, its memory
+            and estimated time with --details
+--aligned-time N  the aligned search's time limit for Auto, in minutes, 0
+            for none (a fresh engine's is the core's default)
 --tsv FILE  also writes the pairs to FILE in UTF-8: difference, transform,
             first and second path (the printed names lose what isn't ASCII)
 --drop-same-name  takes the pairs whose two files have the same name,
@@ -160,8 +163,17 @@ class AdvancedOptions(ctypes.Structure):
 
 
 class AlignedMemory(ctypes.Structure):
+    """adAlignedMemory, of builds with levels chosen by memory alone."""
     _fields_ = [("wanted", ctypes.c_int32), ("used", ctypes.c_int32), ("wantedBytes", ctypes.c_uint64),
                 ("usedBytes", ctypes.c_uint64), ("freeBytes", ctypes.c_uint64), ("imageCount", ctypes.c_uint64)]
+
+
+class AlignedSearch(ctypes.Structure):
+    """adAlignedSearch: the level chosen by memory and time, and the progress."""
+    _fields_ = [("wanted", ctypes.c_int32), ("used", ctypes.c_int32), ("memoryLevel", ctypes.c_int32),
+                ("timeLevel", ctypes.c_int32)] + [(n, ctypes.c_uint64) for n in (
+                    "wantedBytes", "usedBytes", "freeBytes", "wantedSeconds", "usedSeconds", "limitSeconds",
+                    "imageCount", "alignedImages", "alignedSeconds")]
 
 
 class ExifInfoW(ctypes.Structure):
@@ -287,6 +299,7 @@ def main():
     ap.add_argument("--alpha-ignored", action="store_true")
     ap.add_argument("--ignore-transparent", action="store_true")
     ap.add_argument("--aligned-level", type=int)
+    ap.add_argument("--aligned-time", type=int)
     ap.add_argument("--drop-same-name", action="store_true")
     ap.add_argument("--save-results")
     ap.add_argument("--drop-pairs")
@@ -367,6 +380,8 @@ def main():
             ctypes.c_int32.from_buffer(cmp_buf, hardlinks + 8).value = 1
         if a.aligned_level is not None:
             ctypes.c_int32.from_buffer(cmp_buf, hardlinks + 12).value = a.aligned_level
+        if a.aligned_time is not None:
+            ctypes.c_int32.from_buffer(cmp_buf, hardlinks + 16).value = a.aligned_time
         if a.butteraugli_size is not None:
             size = ctypes.c_int32.from_buffer(cmp_buf, BUTTERAUGLI_SIZE_OFFSET)
             if not isinstance(cmp_, DOUBLE_LAYOUTS) or size.value not in BUTTERAUGLI_SIZES:
@@ -380,6 +395,8 @@ def main():
         core.adOptionsGet(h, AD_OPTIONS_COMPARE, back)
         if a.aligned_level is not None and ctypes.c_int32.from_buffer(back, hardlinks + 12).value != a.aligned_level:
             sys.exit("this build has no aligned level, or the level is out of its range")
+        if a.aligned_time is not None and ctypes.c_int32.from_buffer(back, hardlinks + 16).value != a.aligned_time:
+            sys.exit("this build has no aligned time limit, or the limit is out of its range")
         if bytes(back) != bytes(cmp_buf):
             sys.exit("the core reset a compare option out of its range (the threshold goes to 50 at most)")
         adv = AdvancedOptions()
@@ -428,7 +445,16 @@ def main():
                 sys.exit(f"adSearch error {err}")
             if a.details:
                 print(f"search took {time.perf_counter() - t0:.3f} s")
-                if hasattr(core, "adAlignedMemoryGet"):
+                if hasattr(core, "adAlignedSearchGet"):
+                    s = AlignedSearch()
+                    core.adAlignedSearchGet(ctypes.c_void_p(h), ctypes.byref(s))
+                    if s.used:
+                        print(f"aligned level {s.used} (wanted {s.wanted}, memory allows {s.memoryLevel}, time "
+                              f"{s.timeLevel}), {s.imageCount} images: keypoints up to {s.usedBytes / 2**20:.0f} MB "
+                              f"({s.wantedBytes / 2**20:.0f} MB wanted), {s.freeBytes / 2**20:.0f} MB free for them; "
+                              f"estimated {s.usedSeconds} s ({s.wantedSeconds} s wanted, limit {s.limitSeconds} s); "
+                              f"aligned {s.alignedImages} images in {s.alignedSeconds} s")
+                elif hasattr(core, "adAlignedMemoryGet"):
                     memory = AlignedMemory()
                     core.adAlignedMemoryGet(ctypes.c_void_p(h), ctypes.byref(memory))
                     if memory.used:
