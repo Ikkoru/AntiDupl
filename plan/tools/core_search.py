@@ -3,7 +3,8 @@
 Usage:
     python core_search.py DLL_DIR USER_DIR SEARCH_DIR... [--size N] [--threshold N]
                           [--turbo 0|1] [--algorithm 0|1|3|4|5] [--runs N] [--use-db]
-                          [--details] [--collect-threads N] [--transformed]
+                          [--details] [--collect-threads N] [--compare-threads N]
+                          [--transformed]
                           [--images FILE] [--butteraugli-size N] [--frame N]
                           [--any-ratio] [--shifted] [--compare-hardlinks]
 
@@ -31,6 +32,9 @@ SEARCH_DIR  folders to search (subfolders included), with compare-inside-one-
             not decode are AD_DEFECT_UNKNOWN), and for every image in a result
             its type, size and non-empty EXIF fields
 --collect-threads  number of threads that decode images (timing)
+--compare-threads  number of threads that compare them; 0 is the core's
+            default (all logical processors from 100,000 images or with
+            --transformed, half of them otherwise)
 --cache-mb N  the most memory Butteraugli keeps decoded images in, MB, 0
             for no limit (a core with the advanced option
             ButteraugliCacheSize; exits when the core doesn't keep N)
@@ -269,6 +273,7 @@ def main():
     ap.add_argument("--use-db", action="store_true")
     ap.add_argument("--details", action="store_true")
     ap.add_argument("--collect-threads", type=int)
+    ap.add_argument("--compare-threads", type=int)
     ap.add_argument("--transformed", action="store_true")
     ap.add_argument("--images")
     ap.add_argument("--butteraugli-size", type=int)
@@ -385,6 +390,8 @@ def main():
         adv.ignoreFrameWidth = a.frame
         if a.collect_threads is not None:
             adv.collectThreadCount = a.collect_threads
+        if a.compare_threads is not None:
+            adv.compareThreadCount = a.compare_threads
         if a.cache_mb is not None:
             adv.butteraugliCacheSize = a.cache_mb
         if a.cache_percent is not None:
