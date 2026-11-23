@@ -100,7 +100,12 @@ function Test-AdWarning([string]$label, [string]$expected) {
     if (-not $warning) { Stop-Process -Id $p.Id; return }
     $text = Get-AdWarningText $warning
     "  $text"
-    Show-Check ($text -like "*$expected*") "($label) it says: '$expected'"
+    # Auto with too little memory for even the lowest level says so instead.
+    if ($label -eq 'auto' -and $text -like '*for lightest setting*') {
+        Show-Check $true "($label) it says even the lightest setting doesn't fit (too little memory free for the other text now)"
+    } else {
+        Show-Check ($text -like "*$expected*") "($label) it says: '$expected'"
+    }
     if ($Shots) { Save-AdWindowPicture $warning (Join-Path $Shots "warning-$label.png") }
     $running = Test-AdSearching $p
     Show-Check $running "($label) the search runs meanwhile"
