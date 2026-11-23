@@ -20,7 +20,10 @@
 * SOFTWARE.
 */
 #include <math.h>
+#include <algorithm>
+#include <chrono>
 #include <fstream>
+#include <intrin.h>
 
 // libjxl's Butteraugli, compiled into the static jxl.lib, with headers the
 // overlay port src/ports/libjxl installs. Its headers turn their debug
@@ -45,6 +48,7 @@
 #include "adImage.h"
 #include "adImageData.h"
 #include "adOptions.h"
+#include "adStatus.h"
 
 namespace ad
 {
@@ -52,6 +56,9 @@ namespace ad
     // versions, the record count, then TKey and score pairs.
     static const TUInt32 SCORE_FILE_SIGNATURE = 0x53424441; // "ADBS"
     static const TUInt32 SCORE_FILE_FORMAT = 1;
+    static const TUInt32 ALIGN_FAILED_FILE_SIGNATURE = 0x46414441; // "ADAF"
+    // Part of every key too: a new version leaves the old pairs unmatched.
+    static const TUInt32 ALIGN_FAILED_FILE_VERSION = 1;
 
     // Butteraugli wants linear light, 1.0 for white, which it takes to be
     // shown at BUTTERAUGLI_INTENSITY_TARGET.
@@ -157,15 +164,23 @@ namespace ad
     }
 
     // Keypoints from a picture's grey pixels at full size, on a copy of
-    // about ALIGN_IMAGE_AREA pixels.
-    static void ImageKeypoints(const TView & gray, TKeypoints & keypoints)
+    // about the level's area.
+    static void ImageKeypoints(const TView & gray, const TAlignLevel & level, TKeypoints & keypoints)
     {
-        const double scale = std::min(1.0, sqrt(double(ALIGN_IMAGE_AREA) / (double(gray.width) * gray.height)));
+        const double scale = std::min(1.0, sqrt(double(level.area) / (double(gray.width) * gray.height)));
         const size_t w = std::max<size_t>(1, size_t(gray.width * scale + 0.5));
         const size_t h = std::max<size_t>(1, size_t(gray.height * scale + 0.5));
         TView copy(w, h, TView::Gray8);
         AreaResize(gray, copy);
-        FindKeypoints(copy.data, w, h, copy.stride, ALIGN_KEYPOINTS_MAX, keypoints);
+        FindKeypoints(copy.data, w, h, copy.stride, level.keypointsMax, level.pyramidLevels, keypoints);
+    }
+
+    // The most memory the keypoints of so many images take at a level,
+    // with their index.
+    static size_t LevelBytes(const TAlignLevel & level, size_t imageCount)
+    {
+        return imageCount * (ALIGN_IMAGE_OVERHEAD_BYTES + level.keypointsMax * TKeypoints::BYTES_PER_POINT) +
+            TKeypointIndex::Bytes(imageCount, level.keypointsMax);
     }
 
     // Whether two pictures, by their keypoints' transform from the second to
@@ -195,20 +210,116 @@ namespace ad
     //-------------------------------------------------------------------------
     TButteraugliStore::TButteraugliStore(TEngine *pEngine, size_t imageCount)
         : m_pOptions(pEngine->Options())
+        , m_pEngine(pEngine)
+        , m_alignedSearch()
+        , m_pLevel(NULL)
+        , m_participants(0)
+        , m_arrived(0)
+        , m_indexBuilt(false)
         , m_path(pEngine->UserPath() + TEXT("\\butteraugli.adp"))
         , m_imageBytes(0)
         , m_changed(false)
+        , m_failedPath(pEngine->UserPath() + TEXT("\\aligned-failed.adp"))
+        , m_failedSpilled(0)
+        , m_alignedImages(0)
+        , m_alignStart(0)
     {
         static_assert(sizeof(TKey) == 40, "TKey is written to the file as it is");
         if (m_pOptions->compare.algorithmComparing == AD_COMPARING_BUTTERAUGLI_ALIGNED)
+        {
+            // Before the level: the pairs kept take memory the keypoints can't.
+            LoadFailed();
+            ChooseLevel(imageCount);
             m_pIndex.reset(new TKeypointIndex(imageCount, ALIGN_INDEX_KEY_ENTRIES_MAX, ALIGN_INDEX_HITS_MIN));
+        }
         Load();
+    }
+
+    void TButteraugliStore::ChooseLevel(size_t imageCount)
+    {
+        MEMORYSTATUSEX status = { sizeof(status) };
+        size_t room = 0;
+        if (::GlobalMemoryStatusEx(&status))
+        {
+            const size_t reserve = std::max(ALIGN_MEMORY_RESERVE_BYTES,
+                size_t(double(status.ullTotalPhys) * ALIGN_MEMORY_RESERVE_SHARE));
+            const size_t taken = reserve + BUTTERAUGLI_IMAGE_CACHE_BYTES + FailedBytes();
+            // Memory is allocated against the commit limit (the memory and
+            // the page file together), which other programs can have taken
+            // more of than they use: what is free there can be less.
+            const size_t free = size_t(std::min(status.ullAvailPhys, status.ullAvailPageFile));
+            room = free > taken ? free - taken : 0;
+        }
+        // The compare threads the aligned search runs (TCompareManager).
+        size_t threads = size_t(std::max(m_pOptions->advanced.compareThreadCount, 0));
+        if (threads == 0)
+        {
+            SYSTEM_INFO info;
+            ::GetSystemInfo(&info);
+            threads = std::max<size_t>(info.dwNumberOfProcessors, 1);
+        }
+        double seconds[ALIGN_LEVEL_COUNT];
+        for (size_t i = 0; i < ALIGN_LEVEL_COUNT; ++i)
+            seconds[i] = LevelSeconds(ALIGN_LEVELS[i], imageCount, threads,
+                MatchingSeconds(ALIGN_LEVELS[i].keypointsMax, threads));
+        const double limit = 60.0 * std::max(m_pOptions->compare.alignedTimeLimit, 0);
+
+        size_t memoryLevel = ALIGN_LEVEL_COUNT, timeLevel = ALIGN_LEVEL_COUNT;
+        while (memoryLevel > 1 && LevelBytes(ALIGN_LEVELS[memoryLevel - 1], imageCount) > room)
+            --memoryLevel;
+        while (limit > 0 && timeLevel > 1 && seconds[timeLevel - 1] > limit)
+            --timeLevel;
+        // Auto wants what the time limit, which the user sets, allows, and
+        // takes less only when memory falls short of it.
+        const TInt32 setting = m_pOptions->compare.alignedLevel;
+        const size_t wanted = setting >= 1 && size_t(setting) <= ALIGN_LEVEL_COUNT ? size_t(setting) : timeLevel;
+        const size_t used = setting == 0 ? std::min(memoryLevel, timeLevel) : wanted;
+        m_pLevel = &ALIGN_LEVELS[used - 1];
+        m_alignedSearch.wanted = adInt32(wanted);
+        m_alignedSearch.used = adInt32(used);
+        m_alignedSearch.memoryLevel = adInt32(memoryLevel);
+        m_alignedSearch.timeLevel = adInt32(timeLevel);
+        m_alignedSearch.wantedBytes = LevelBytes(ALIGN_LEVELS[wanted - 1], imageCount);
+        m_alignedSearch.usedBytes = LevelBytes(*m_pLevel, imageCount);
+        m_alignedSearch.freeBytes = room;
+        m_alignedSearch.wantedSeconds = adUInt64(seconds[wanted - 1] + 0.5);
+        m_alignedSearch.usedSeconds = adUInt64(seconds[used - 1] + 0.5);
+        m_alignedSearch.limitSeconds = adUInt64(limit);
+        m_alignedSearch.imageCount = imageCount;
+    }
+
+    double TButteraugliStore::LevelSeconds(const TAlignLevel & level, size_t imageCount, size_t threads, double pairSeconds) const
+    {
+        // The index lets nearly every pair through: drawings by one artist
+        // share keypoint descriptions.
+        const double pairs = 0.5 * double(imageCount) * (double(imageCount) - 1);
+        return pairs * pairSeconds + imageCount * level.imageSeconds / threads;
+    }
+
+    void TButteraugliStore::AlignedProgress(adAlignedSearch & report) const
+    {
+        const long long start = m_alignStart.load();
+        if (start == 0)
+            return;
+        const long long now = std::chrono::steady_clock::now().time_since_epoch().count();
+        report.alignedImages = m_alignedImages.load();
+        report.alignedSeconds = adUInt64(double(now - start) * std::chrono::steady_clock::period::num /
+            std::chrono::steady_clock::period::den);
     }
 
     TButteraugliStore::~TButteraugliStore()
     {
         if (m_changed)
             Save();
+        if (m_pLevel)
+        {
+            // The keypoints' memory goes first: the pairs kept are all
+            // loaded to be merged.
+            m_pIndex.reset();
+            m_keypoints.clear();
+            m_images.clear();
+            SaveFailed();
+        }
     }
 
     size_t TButteraugliStore::TWorkImage::Bytes() const
@@ -334,7 +445,7 @@ namespace ad
     void TButteraugliStore::SetKeypoints(TImageDataPtr pImageData, const TView & gray)
     {
         std::shared_ptr<TKeypoints> keypoints = std::make_shared<TKeypoints>();
-        ImageKeypoints(gray, *keypoints);
+        ImageKeypoints(gray, *m_pLevel, *keypoints);
         std::lock_guard<std::mutex> lock(m_keypointMutex);
         m_keypoints[pImageData] = keypoints;
     }
@@ -346,6 +457,54 @@ namespace ad
         return it != m_keypoints.end() ? it->second : NULL;
     }
 
+    void TButteraugliStore::Join()
+    {
+        std::lock_guard<std::mutex> lock(m_indexMutex);
+        ++m_participants;
+    }
+
+    void TButteraugliStore::Queue(TImageDataPtr pImageData)
+    {
+        const std::shared_ptr<const TKeypoints> keypoints = Keypoints(pImageData);
+        if (!keypoints || keypoints->Size() == 0 || !m_pIndex)
+            return;
+        std::lock_guard<std::mutex> lock(m_indexMutex);
+        m_indexed.push_back(pImageData);
+    }
+
+    bool TButteraugliStore::Gather()
+    {
+        std::unique_lock<std::mutex> lock(m_indexMutex);
+        if (!m_pIndex)
+            return false;
+        if (++m_arrived == m_participants)
+        {
+            // A key full of images stops counting, so the images in the
+            // index when one is looked up decide its candidates: all of
+            // them, added in an order that doesn't depend on the threads.
+            std::sort(m_indexed.begin(), m_indexed.end(), [](TImageDataPtr a, TImageDataPtr b)
+                { return TPath::LesserByPath(a->path, b->path); });
+            std::vector<std::shared_ptr<const TKeypoints>> keypoints(m_indexed.size());
+            for (size_t i = 0; i < m_indexed.size(); ++i)
+            {
+                keypoints[i] = Keypoints(m_indexed[i]);
+                m_number[m_indexed[i]] = uint32_t(i);
+            }
+            m_pIndex->Build(keypoints.size(), [&](size_t i) -> const TKeypoints & { return *keypoints[i]; });
+            m_indexBuilt = true;
+            m_alignStart = std::max<long long>(1, std::chrono::steady_clock::now().time_since_epoch().count());
+            m_gathered.notify_all();
+            return true;
+        }
+        while (!m_indexBuilt)
+        {
+            if (m_pEngine->Status()->Stopped())
+                return false;
+            m_gathered.wait_for(lock, std::chrono::milliseconds(200));
+        }
+        return true;
+    }
+
     void TButteraugliStore::Candidates(TImageDataPtr pImageData, std::vector<TImageDataPtr> & candidates)
     {
         candidates.clear();
@@ -354,11 +513,20 @@ namespace ad
             return;
         std::vector<uint32_t> found;
         std::lock_guard<std::mutex> lock(m_indexMutex);
+        auto self = m_number.find(pImageData);
+        if (!m_indexBuilt || self == m_number.end())
+            return;
         m_pIndex->Find(*keypoints, found);
         for (const uint32_t image : found)
-            candidates.push_back(m_indexed[image]);
-        m_pIndex->Add(*keypoints);
-        m_indexed.push_back(pImageData);
+            if (image != self->second)
+                candidates.push_back(m_indexed[image]);
+    }
+
+    bool TButteraugliStore::Claim(TImageDataPtr pFirst, TImageDataPtr pSecond)
+    {
+        std::lock_guard<std::mutex> lock(m_indexMutex);
+        const uint64_t a = m_number[pFirst], b = m_number[pSecond];
+        return m_claimed.insert(a < b ? (a << 32) | b : (b << 32) | a).second;
     }
 
     // From pixels of a picture of one size to those of another: pixel
@@ -374,7 +542,10 @@ namespace ad
     {
         if (Before(pSecond, pFirst))
             std::swap(pFirst, pSecond);
-        const TKey key = Key(pFirst, pSecond, AD_TRANSFORM_TURN_0, ALIGNED_SCORE_VERSION, background);
+        // Each level's keypoints give their own transform, and so their own
+        // score; the level goes above the background's bits (Key).
+        const TInt32 level = TInt32(m_pLevel ? m_pLevel - ALIGN_LEVELS : 0);
+        const TKey key = Key(pFirst, pSecond, AD_TRANSFORM_TURN_0, ALIGNED_SCORE_VERSION | (level << 16), background);
         const bool keyed = pFirst->crc32c != 0 && pFirst->crc32c != TUInt32(-1) &&
             pSecond->crc32c != 0 && pSecond->crc32c != TUInt32(-1) && background.kind != TBackground::FILL;
         if (keyed)
@@ -385,15 +556,22 @@ namespace ad
                 return it->second;
         }
 
-        // Most candidates end here, and matching them again costs less than
-        // keeping them all in the scores' file.
+        // Most candidates end here, and are kept apart from the scores, by
+        // level: another level's keypoints can align them.
+        const uint64_t failedKey = keyed && m_pLevel ? FailedKey(key) : 0;
+        if (failedKey && Failed(failedKey))
+            return -1;
         const std::shared_ptr<const TKeypoints> firstKeypoints = Keypoints(pFirst), secondKeypoints = Keypoints(pSecond);
+        if (!firstKeypoints || !secondKeypoints)
+            return -1;
         TAffine transform;
-        if (!firstKeypoints || !secondKeypoints || !FindTransform(*secondKeypoints, *firstKeypoints, transform, NULL))
-            return -1;
         const TKeypoints & a = *firstKeypoints, & b = *secondKeypoints;
-        if (!EnoughOverlap(a, b, transform))
+        if (!FindTransform(b, a, transform, NULL) || !EnoughOverlap(a, b, transform))
+        {
+            if (failedKey)
+                AddFailed(failedKey);
             return -1;
+        }
 
         TWorkImagePtr first = Image(pFirst), second = Image(pSecond);
         if (!first->bgr || !second->bgr)
@@ -718,6 +896,128 @@ namespace ad
                 return;
         }
         ::MoveFileEx(temporary.c_str(), m_path.c_str(), MOVEFILE_REPLACE_EXISTING);
+    }
+
+    static inline uint64_t Mix(uint64_t h)
+    {
+        // splitmix64's finaliser: each input bit moves about half the output's.
+        h ^= h >> 30;
+        h *= 0xBF58476D1CE4E5B9ull;
+        h ^= h >> 27;
+        h *= 0x94D049BB133111EBull;
+        return h ^ (h >> 31);
+    }
+
+    // 64 bits: a pair's lookup finds another's key with odds of the pairs
+    // kept over 2^64, and that pair then goes unaligned; for 10,000 images'
+    // pairs, all kept and all looked up, once in several thousand searches.
+    uint64_t TButteraugliStore::FailedKey(const TKey & key) const
+    {
+        uint64_t words[sizeof(TKey) / sizeof(uint64_t)];
+        memcpy(words, &key, sizeof(words));
+        uint64_t h = Mix(ALIGN_FAILED_FILE_VERSION);
+        for (const uint64_t w : words)
+            h = Mix(h ^ w);
+        h = Mix(h ^ m_pLevel->area);
+        h = Mix(h ^ m_pLevel->keypointsMax);
+        return Mix(h ^ m_pLevel->pyramidLevels);
+    }
+
+    bool TButteraugliStore::Failed(uint64_t key)
+    {
+        auto it = std::lower_bound(m_failed.begin(), m_failed.end(), key);
+        if (it == m_failed.end() || *it != key)
+            return false;
+        const size_t i = size_t(it - m_failed.begin());
+        _InterlockedOr64((volatile long long *)&m_failedUsed[i / 64], (long long)(uint64_t(1) << (i % 64)));
+        return true;
+    }
+
+    // A chunk at a time to the file beside the kept pairs, merged with them
+    // when the search ends; one left by a search that didn't end is dropped
+    // on the next load.
+    void TButteraugliStore::AddFailed(uint64_t key)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_failedNew.push_back(key);
+        if (m_failedNew.size() < ALIGN_FAILED_CHUNK)
+            return;
+        std::ofstream file((m_failedPath + TEXT(".new")).c_str(), std::ios::binary | std::ios::app);
+        file.write((const char*)m_failedNew.data(), m_failedNew.size() * sizeof(uint64_t));
+        if (file)
+            m_failedSpilled += m_failedNew.size();
+        m_failedNew.clear();
+    }
+
+    size_t TButteraugliStore::FailedBytes() const
+    {
+        return m_failed.size() * sizeof(uint64_t) + m_failedUsed.size() * sizeof(uint64_t) +
+            ALIGN_FAILED_CHUNK * sizeof(uint64_t);
+    }
+
+    void TButteraugliStore::LoadFailed()
+    {
+        ::DeleteFile((m_failedPath + TEXT(".new")).c_str());
+        std::ifstream file(m_failedPath.c_str(), std::ios::binary);
+        if (!file)
+            return;
+        TUInt32 header[2] = { 0 };
+        TUInt64 count = 0;
+        file.read((char*)header, sizeof(header));
+        file.read((char*)&count, sizeof(count));
+        if (!file || header[0] != ALIGN_FAILED_FILE_SIGNATURE || header[1] != ALIGN_FAILED_FILE_VERSION)
+            return;
+        m_failed.resize((size_t)count);
+        file.read((char*)m_failed.data(), m_failed.size() * sizeof(uint64_t));
+        if (!file || !std::is_sorted(m_failed.begin(), m_failed.end()))
+        {
+            m_failed.clear();
+            m_failed.shrink_to_fit();
+            return;
+        }
+        m_failedUsed.assign((m_failed.size() + 63) / 64, 0);
+    }
+
+    void TButteraugliStore::SaveFailed()
+    {
+        const TString chunks = m_failedPath + TEXT(".new");
+        if (m_failedNew.empty() && m_failedSpilled == 0)
+            return;
+        std::vector<uint64_t> all;
+        all.reserve(m_failedSpilled + m_failedNew.size() + m_failed.size());
+        if (m_failedSpilled)
+        {
+            std::ifstream file(chunks.c_str(), std::ios::binary);
+            all.resize(m_failedSpilled);
+            file.read((char*)all.data(), all.size() * sizeof(uint64_t));
+            if (!file)
+                all.clear();
+        }
+        all.insert(all.end(), m_failedNew.begin(), m_failedNew.end());
+        const bool prune = m_failed.size() + all.size() > ALIGN_FAILED_MAX;
+        for (size_t i = 0; i < m_failed.size(); ++i)
+            if (!prune || (m_failedUsed[i / 64] >> (i % 64) & 1))
+                all.push_back(m_failed[i]);
+        m_failed.clear();
+        m_failed.shrink_to_fit();
+        std::sort(all.begin(), all.end());
+        all.erase(std::unique(all.begin(), all.end()), all.end());
+
+        const TString temporary = m_failedPath + TEXT(".tmp");
+        {
+            std::ofstream file(temporary.c_str(), std::ios::binary | std::ios::trunc);
+            if (!file)
+                return;
+            const TUInt32 header[2] = { ALIGN_FAILED_FILE_SIGNATURE, ALIGN_FAILED_FILE_VERSION };
+            const TUInt64 count = all.size();
+            file.write((const char*)header, sizeof(header));
+            file.write((const char*)&count, sizeof(count));
+            file.write((const char*)all.data(), all.size() * sizeof(uint64_t));
+            if (!file)
+                return;
+        }
+        ::MoveFileEx(temporary.c_str(), m_failedPath.c_str(), MOVEFILE_REPLACE_EXISTING);
+        ::DeleteFile(chunks.c_str());
     }
     //-------------------------------------------------------------------------
 }

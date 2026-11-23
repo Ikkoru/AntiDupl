@@ -22,9 +22,13 @@
 #ifndef __adButteraugli_h__
 #define __adButteraugli_h__
 
+#include <atomic>
+#include <chrono>
 #include <list>
 #include <memory>
+#include <condition_variable>
 #include <mutex>
+#include <unordered_set>
 #include <unordered_map>
 
 #include "adAlign.h"
@@ -66,12 +70,31 @@ namespace ad
         // decoding the images the image database would otherwise spare.
         bool NeedsKeypoints() const { return m_pIndex != NULL; }
 
+        // The aligned search's level, chosen when the store is made, and
+        // the memory and time behind the choice; all 0 in other searches.
+        const adAlignedSearch & AlignedSearch() const { return m_alignedSearch; }
+        // The aligning's progress so far, into the report's fields for it.
+        void AlignedProgress(adAlignedSearch & report) const;
+
         // An image's keypoints, from its grey pixels at full size.
         void SetKeypoints(TImageDataPtr pImageData, const TView & gray);
 
-        // The images given here before that share many keypoints with this
-        // one, which then joins them: of any two, the later finds the earlier.
+        // The aligned search's candidates, in three steps, so that they don't
+        // depend on the order images arrive in: each compare thread joins
+        // (its comparer, when made) and queues its images for the keypoint
+        // index as they come; when its queue is done, it waits in Gather
+        // until every thread has come, and the last one builds the index in
+        // path order; then each looks its own images up in the whole index
+        // (Candidates) and scores a pair only if it claims it first, as
+        // both images of a pair may find each other.
+        void Join();
+        void Queue(TImageDataPtr pImageData);
+        // False when the search was stopped while waiting.
+        bool Gather();
         void Candidates(TImageDataPtr pImageData, std::vector<TImageDataPtr> & candidates);
+        bool Claim(TImageDataPtr pFirst, TImageDataPtr pSecond);
+        // An image aligned with all its candidates, for the progress.
+        void Aligned() { ++m_alignedImages; }
 
         // Butteraugli's score for what the two images show in common, each
         // laid over the other; negative when they don't align, share too
@@ -120,8 +143,25 @@ namespace ad
         double Compute(const TView & first, const TView & second, adTransformType transform) const;
         double ComputeAligned(const TView & first, const TView & second, const TAffine & transform) const;
         std::shared_ptr<const TKeypoints> Keypoints(TImageDataPtr pImageData);
+        // The setting's level, or for Auto the highest whose keypoints for
+        // so many images fit in the memory free now, less a reserve and
+        // the decoded images' cache, and whose search fits in the time
+        // limit; the lowest when none does.
+        void ChooseLevel(size_t imageCount);
+        // The whole search's estimated time at a level: every pair's
+        // keypoints matched, at the pace measured on this machine as the
+        // search starts, and each image's own work.
+        double LevelSeconds(const TAlignLevel & level, size_t imageCount, size_t threads, double pairSeconds) const;
         void Load();
         void Save() const;
+        // A pair's key for the pairs without an alignment: its score's key
+        // and the level's keypoint settings, hashed.
+        uint64_t FailedKey(const TKey & key) const;
+        bool Failed(uint64_t key);
+        void AddFailed(uint64_t key);
+        size_t FailedBytes() const; // what the kept pairs take during a search
+        void LoadFailed();
+        void SaveFailed();
 
         const TOptions *m_pOptions;
         TString m_path;
@@ -131,12 +171,30 @@ namespace ad
         size_t m_imageBytes;
         std::unordered_map<TKey, double, TKeyHash> m_scores;
         bool m_changed;
+        // The pairs without an alignment as loaded, sorted, and read only
+        // during the search; a bit per entry for those looked up; the new
+        // ones not yet written to the chunk file beside m_failedPath.
+        TString m_failedPath;
+        std::vector<uint64_t> m_failed;
+        std::vector<uint64_t> m_failedUsed;
+        std::vector<uint64_t> m_failedNew;
+        size_t m_failedSpilled;
 
         std::mutex m_keypointMutex;
         std::unordered_map<TImageDataPtr, std::shared_ptr<const TKeypoints>> m_keypoints;
+        TEngine *m_pEngine;
+        adAlignedSearch m_alignedSearch;
+        const TAlignLevel *m_pLevel; // NULL but in the aligned search
         std::mutex m_indexMutex;
+        std::condition_variable m_gathered;
+        size_t m_participants, m_arrived;
+        bool m_indexBuilt;
         std::unique_ptr<TKeypointIndex> m_pIndex; // NULL but in the aligned search
-        std::vector<TImageDataPtr> m_indexed; // by the index's image numbers
+        std::vector<TImageDataPtr> m_indexed; // by the index's image numbers, in path order once built
+        std::unordered_map<TImageDataPtr, uint32_t> m_number; // the index's number of each image
+        std::unordered_set<uint64_t> m_claimed; // pairs of index numbers, the smaller first
+        std::atomic<uint64_t> m_alignedImages; // aligned with all their candidates
+        std::atomic<long long> m_alignStart; // steady_clock ticks when the index was built; 0 before
     };
     //-------------------------------------------------------------------------
     //-------------------------------------------------------------------------
