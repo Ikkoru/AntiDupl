@@ -128,7 +128,8 @@ namespace ad
                 Sleep(m_sleepInterval);
                 continue;
             case TThreadQueue::FINISH:
-            default: 
+            default:
+                DoFinish();
                 return;
             }
         }
@@ -154,6 +155,11 @@ namespace ad
     void TCompareTask::DoOther(TImageData *pImageData)
     {
         m_pImageComparer->Accept(pImageData, false);
+    }
+
+    void TCompareTask::DoFinish()
+    {
+        m_pImageComparer->Finish();
     }
 
     //-------------------------------------------------------------------------
@@ -191,9 +197,13 @@ namespace ad
 
     void TThreadManager::Finish()
     {
+        // Every queue first, then the waiting: a thread may wait at its end
+        // for the others (the aligned search's index), which must all be
+        // told to finish.
+        for(TThreads::iterator i = m_pThreads->begin(); i != m_pThreads->end(); i++)
+            i->task->Queue()->Finish();
         for(TThreads::iterator i = m_pThreads->begin(); i != m_pThreads->end(); i++)
         {
-            i->task->Queue()->Finish();
             WaitForSingleObject(i->thread->Handle(), INFINITE);
             delete i->thread;
             delete i->task;
@@ -272,7 +282,10 @@ namespace ad
     size_t TCompareManager::DefaultThreadCount(size_t imageCount)
     {
         size_t threadCountMax = GetProcessorCount();
-        if(imageCount > (size_t)LARGE_IMAGE_COLLECTION_SIZE_MIN || m_pOptions->compare.transformedImage == TRUE)
+        // The aligned search matches keypoints of nearly every pair, work
+        // that keeps every processor busy whatever the collection's size.
+        if(imageCount > (size_t)LARGE_IMAGE_COLLECTION_SIZE_MIN || m_pOptions->compare.transformedImage == TRUE ||
+            m_pOptions->compare.algorithmComparing == AD_COMPARING_BUTTERAUGLI_ALIGNED)
             return threadCountMax;
         else
             return Simd::Max((size_t)1, threadCountMax/2);

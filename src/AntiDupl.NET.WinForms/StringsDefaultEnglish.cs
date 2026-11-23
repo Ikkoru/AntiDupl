@@ -131,6 +131,13 @@ namespace AntiDupl.NET.WinForms
             s.CoreOptionsForm_IgnoreFrameWidthLabeledComboBox_Text = "Width of ignored frame of image";
             s.CoreOptionsForm_TransparentAsShownCheckBox_Text = "Improve transparent image comparison";
             s.CoreOptionsForm_IgnoreTransparentCheckBox_Text = "Ignore areas with transparency in both images";
+            s.CoreOptionsForm_AlignedLevelLabeledComboBox_Text = "Smallest findable crop (aligned search)";
+            s.CoreOptionsForm_AlignedLevelLabeledComboBox_Auto = "Auto: as small as memory and time allow";
+            s.CoreOptionsForm_AlignedLevelLabeledComboBox_Level1 = "1/10 of image, 0.6 GB per 10k files";
+            s.CoreOptionsForm_AlignedLevelLabeledComboBox_Level2 = "1/20 of image, 1.1 GB per 10k files";
+            s.CoreOptionsForm_AlignedLevelLabeledComboBox_Level3 = "1/50 of image, 2.1 GB per 10k files";
+            s.CoreOptionsForm_AlignedLevelLabeledComboBox_Level4 = "1/100 of image, 4.0 GB per 10k files";
+            s.CoreOptionsForm_AlignedTimeLimitLabeledIntegerEdit_Text = "Aligned search time limit, minutes (0 = none)";
             s.CoreOptionsForm_UseLibJpegTurboCheckBox_Text = "Use libjpeg-turbo";
             s.CoreOptionsForm_ButteraugliCacheSizeLabeledIntegerEdit_Text = "RAM limit for Butteraugli's images, MB (0: none)";
             s.CoreOptionsForm_ButteraugliCachePercentLabeledIntegerEdit_Text = "RAM for Butteraugli's images, % of free";
@@ -187,9 +194,33 @@ namespace AntiDupl.NET.WinForms
 
             s.SearchExecuterForm_Result = "Result processing";
             s.SearchExecuterForm_Search = "Search";
+            s.SearchExecuterForm_AlignedPlan = "crops down to ~{0}, about {1} in all";
+            s.SearchExecuterForm_Aligning = "Finding crops down to ~{0}: about {1} left";
             s.SearchExecuterForm_Stopped = "Stopping of search";
             s.SearchExecuterForm_MinimizeToTaskbarButton_Text = "Minimize";
             s.SearchExecuterForm_MinimizeToSystrayButton_Text = "Background Mode";
+
+            s.AlignedMemoryForm_Text = "Not enough memory for the smallest crops";
+            s.AlignedMemoryForm_Size = "Search size: {0:N0} files.";
+            s.AlignedMemoryForm_Needed = "RAM needed: ~{0} (for minimum crop size ~{1}).";
+            s.AlignedMemoryForm_NeededLowest = "RAM needed: ~{0} (for lightest setting: minimum crop size ~{1}).";
+            s.AlignedMemoryForm_Free = "RAM free for this search: {0} (after a reserve for Windows and other programs).";
+            s.AlignedMemoryForm_Instead = "Searching for minimum crop size ~{0} instead (~{1} needed).";
+            s.AlignedMemoryForm_ContinuesForced = "Search will continue at your setting, but Windows may move memory to disk.\nThis may slow the search and other programs, and some programs, this one included, may fail.";
+            s.AlignedMemoryForm_ContinuesLowest = "Search will continue, but Windows may move memory to disk.\nThis may slow the search and other programs, and some programs, this one included, may fail.";
+            s.AlignedMemoryForm_Choices = "To find the smaller crops, you can:\n\u2022 let this search finish, review results, delete or move files, then repeat this search with fewer images;\n\u2022 stop the search, then search fewer folders at a time;\n\u2022 stop the search, close other programs to free memory, then search again.";
+            s.AlignedMemoryForm_ChoicesForced = "You can:\n\u2022 let this search finish slowly;\n\u2022 stop the search, then search fewer folders at a time;\n\u2022 stop the search, close other programs to free memory, then search again;\n\u2022 stop the search, set Options > Advanced > Smallest findable crop to Auto, then search again.";
+            s.AlignedMemoryForm_ChoicesLowest = "You can:\n\u2022 let this search finish slowly;\n\u2022 stop the search, then search fewer folders at a time;\n\u2022 stop the search, close other programs to free memory, then search again.";
+            s.AlignedMemoryForm_Gigabytes = "{0:0.0} GB";
+            s.AlignedMemoryForm_StopButton_Text = "Stop search";
+            s.AlignedMemoryForm_CloseButton_Text = "Close";
+            s.AlignedMemoryForm_Level1 = "1/10";
+            s.AlignedMemoryForm_Level2 = "1/20";
+            s.AlignedMemoryForm_Level3 = "1/50";
+            s.AlignedMemoryForm_Level4 = "1/100";
+            s.AlignedSearch_Minutes = "{0} min";
+            s.AlignedSearch_Hours = "{0} h {1} min";
+            s.AlignedSearch_Days = "{0} d {1} h";
 
             s.ResultsPreviewBase_NextButton_ToolTip_Text = "Go to the next result";
             s.ResultsPreviewBase_PreviousButton_ToolTip_Text = "Go to the previous result";

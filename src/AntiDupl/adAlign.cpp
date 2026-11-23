@@ -22,8 +22,11 @@
 * SOFTWARE.
 */
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
+#include <thread>
+#include <immintrin.h>
 #include <intrin.h>
 
 #include "adAlign.h"
@@ -33,7 +36,6 @@ namespace ad
     // Keypoints: FAST corners (Rosten and Drummond) on a pyramid, ranked by
     // Harris' measure as ORB does (Rublee et al.), with BRIEF's comparisons
     // of smoothed pixels as the description (Calonder et al.).
-    static const int LEVELS = 8;
     static const double LEVEL_SCALE = 1.2;
     static const int FAST_THRESHOLD = 20;
     static const int FAST_THRESHOLD_LOW = 8; // for a picture with few corners
@@ -50,7 +52,9 @@ namespace ad
     static const double INLIER_DISTANCE = 2.0; // pixels of the keypoints' picture
     static const int RANSAC_ROUNDS_MAX = 2000;
     static const double RANSAC_CONFIDENCE = 0.995;
-    static const double SCALE_MIN = 1.0 / 8, SCALE_MAX = 8.0;
+    // A small file against a crop of a large one, both copied to 3 million
+    // pixels, can differ 11 times in scale; 8 missed such pairs.
+    static const double SCALE_MIN = 1.0 / 16, SCALE_MAX = 16.0;
     static const double TURN_MAX = 0.35; // radians; upright descriptions don't match past it
 
     // The index.
@@ -388,25 +392,30 @@ namespace ad
     }
 
     void FindKeypoints(const uint8_t * gray, size_t width, size_t height, ptrdiff_t stride,
-        size_t maxCount, TKeypoints & keypoints)
+        size_t maxCount, size_t levels, TKeypoints & keypoints)
     {
         keypoints.width = width;
         keypoints.height = height;
+        keypoints.unit = float(std::max<size_t>(std::max(width, height), 1)) / 65535;
         keypoints.x.clear();
         keypoints.y.clear();
-        keypoints.bits.clear();
+        keypoints.x.reserve(maxCount);
+        keypoints.y.reserve(maxCount);
+        std::vector<uint64_t> bits;
+        bits.reserve(maxCount * KEYPOINT_WORDS);
 
         // Each level's share of the keypoints follows its area's root, as
         // in ORB, so that a smaller copy's keypoints find theirs.
-        double shares[LEVELS], total = 0;
-        for (int i = 0; i < LEVELS; ++i)
-            total += shares[i] = pow(1 / LEVEL_SCALE, i);
+        std::vector<double> shares(levels);
+        double total = 0;
+        for (size_t i = 0; i < levels; ++i)
+            total += shares[i] = pow(1 / LEVEL_SCALE, double(i));
 
         TPlane plane, smooth;
         std::vector<TCorner> corners;
-        for (int level = 0; level < LEVELS; ++level)
+        for (size_t level = 0; level < levels; ++level)
         {
-            const double scale = pow(LEVEL_SCALE, level);
+            const double scale = pow(LEVEL_SCALE, double(level));
             const int w = int(width / scale + 0.5), h = int(height / scale + 0.5);
             if (w < 2 * MARGIN + 8 || h < 2 * MARGIN + 8)
                 break;
@@ -422,27 +431,70 @@ namespace ad
             const double sx = double(width) / w, sy = double(height) / h;
             for (const TCorner & c : corners)
             {
-                keypoints.x.push_back(float((c.x + 0.5) * sx - 0.5));
-                keypoints.y.push_back(float((c.y + 0.5) * sy - 0.5));
-                keypoints.bits.resize(keypoints.bits.size() + KEYPOINT_WORDS);
-                Describe(smooth, c.x, c.y, keypoints.bits.data() + keypoints.bits.size() - KEYPOINT_WORDS);
+                keypoints.x.push_back(uint16_t((c.x + 0.5) * sx / keypoints.unit + 0.5));
+                keypoints.y.push_back(uint16_t((c.y + 0.5) * sy / keypoints.unit + 0.5));
+                bits.resize(bits.size() + KEYPOINT_WORDS);
+                Describe(smooth, c.x, c.y, bits.data() + bits.size() - KEYPOINT_WORDS);
+            }
+        }
+        keypoints.x.shrink_to_fit();
+        keypoints.y.shrink_to_fit();
+        keypoints.SetDescriptions(bits);
+    }
+
+    // A description's 32-bit word w is the low (even w) or high half of its
+    // 64-bit word w / 2, as both lie in memory on a little-endian machine.
+    void TKeypoints::Description(size_t i, uint64_t * bits) const
+    {
+        const uint32_t * block = words.data() + (i / KEYPOINT_BLOCK) * KEYPOINT_BLOCK * 2 * KEYPOINT_WORDS;
+        const size_t lane = i % KEYPOINT_BLOCK;
+        for (size_t k = 0; k < KEYPOINT_WORDS; ++k)
+            bits[k] = uint64_t(block[(2 * k) * KEYPOINT_BLOCK + lane]) |
+                uint64_t(block[(2 * k + 1) * KEYPOINT_BLOCK + lane]) << 32;
+    }
+
+    void TKeypoints::SetDescriptions(const std::vector<uint64_t> & bits)
+    {
+        const size_t count = bits.size() / KEYPOINT_WORDS;
+        const size_t blocks = (count + KEYPOINT_BLOCK - 1) / KEYPOINT_BLOCK;
+        words.assign(blocks * KEYPOINT_BLOCK * 2 * KEYPOINT_WORDS, 0);
+        for (size_t i = 0; i < count; ++i)
+        {
+            uint32_t * block = words.data() + (i / KEYPOINT_BLOCK) * KEYPOINT_BLOCK * 2 * KEYPOINT_WORDS;
+            const size_t lane = i % KEYPOINT_BLOCK;
+            for (size_t k = 0; k < KEYPOINT_WORDS; ++k)
+            {
+                block[(2 * k) * KEYPOINT_BLOCK + lane] = uint32_t(bits[i * KEYPOINT_WORDS + k]);
+                block[(2 * k + 1) * KEYPOINT_BLOCK + lane] = uint32_t(bits[i * KEYPOINT_WORDS + k] >> 32);
             }
         }
     }
     //-------------------------------------------------------------------------
-    TKeypointIndex::TKeypointIndex(size_t imagesExpected, size_t entriesPerKey, size_t hitsMin, size_t tables)
+    TKeypointIndex::TKeypointIndex(size_t images, size_t entriesPerKey, size_t hitsMin, size_t tables)
         : m_tables(tables)
-        , m_keyBits(16)
-        , m_entriesPerKey(std::min<size_t>(entriesPerKey, 255))
+        , m_keyBits(KeyBits(images))
+        , m_entriesPerKey(entriesPerKey)
         , m_hitsMin(hitsMin)
-        , m_imageCount(0)
+    {
+        m_starts.assign((m_tables << m_keyBits) + 1, 0);
+        m_full.assign(m_tables << m_keyBits, false);
+    }
+
+    size_t TKeypointIndex::KeyBits(size_t images)
     {
         // About one entry per key at most in a table, whose keys are bits
         // the description's words give without any hashing.
-        while (m_keyBits < 24 && (size_t(1) << m_keyBits) < imagesExpected * KEYPOINT_INDEX_ENTRIES_PER_IMAGE)
-            ++m_keyBits;
-        m_heads.assign(m_tables << m_keyBits, 0);
-        m_counts.assign(m_tables << m_keyBits, 0);
+        size_t bits = 16;
+        while (bits < 24 && (size_t(1) << bits) < images * KEYPOINT_INDEX_ENTRIES_PER_IMAGE)
+            ++bits;
+        return bits;
+    }
+
+    size_t TKeypointIndex::Bytes(size_t images, size_t keypointsPerImage, size_t tables)
+    {
+        const size_t keys = tables << KeyBits(images);
+        return keys * sizeof(uint32_t) + keys / 8 + images * keypointsPerImage * tables * sizeof(uint32_t) +
+            images * (sizeof(uint16_t) + sizeof(uint32_t));
     }
 
     size_t TKeypointIndex::Key(const uint64_t * bits, size_t table) const
@@ -451,44 +503,34 @@ namespace ad
         return (table << m_keyBits) + size_t((bits[word] >> (part * m_keyBits)) & ((uint64_t(1) << m_keyBits) - 1));
     }
 
-    void TKeypointIndex::Add(const TKeypoints & keypoints)
+    void TKeypointIndex::Keys(const TKeypoints & keypoints, std::vector<uint32_t> & keys) const
     {
-        const uint32_t image = m_imageCount++;
-        m_hits.push_back(0);
+        keys.clear();
+        uint64_t bits[KEYPOINT_WORDS];
         for (size_t i = 0, n = keypoints.Size(); i < n; ++i)
         {
-            const uint64_t * bits = keypoints.bits.data() + i * KEYPOINT_WORDS;
+            keypoints.Description(i, bits);
             for (size_t table = 0; table < m_tables; ++table)
-            {
-                const size_t key = Key(bits, table);
-                uint32_t & head = m_heads[key];
-                if (m_counts[key] >= m_entriesPerKey || (head != 0 && m_entries[head - 1].image == image))
-                    continue;
-                ++m_counts[key];
-                TEntry entry = { image, head };
-                m_entries.push_back(entry);
-                head = uint32_t(m_entries.size());
-            }
+                keys.push_back(uint32_t(Key(bits, table)));
         }
+        std::sort(keys.begin(), keys.end());
+        keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
     }
 
     void TKeypointIndex::Find(const TKeypoints & keypoints, std::vector<uint32_t> & images)
     {
         images.clear();
         m_hit.clear();
+        uint64_t bits[KEYPOINT_WORDS];
         for (size_t i = 0, n = keypoints.Size(); i < n; ++i)
         {
-            const uint64_t * bits = keypoints.bits.data() + i * KEYPOINT_WORDS;
+            keypoints.Description(i, bits);
             for (size_t table = 0; table < m_tables; ++table)
             {
                 const size_t key = Key(bits, table);
-                // A key that many images share says nothing about any of
-                // them, and would make its first images candidates for all.
-                if (m_counts[key] >= m_entriesPerKey)
-                    continue;
-                for (uint32_t e = m_heads[key]; e != 0; e = m_entries[e - 1].next)
+                for (uint32_t e = m_starts[key], end = m_starts[key + 1]; e < end; ++e)
                 {
-                    const uint32_t image = m_entries[e - 1].image;
+                    const uint32_t image = m_entries[e];
                     if (m_hits[image]++ == 0)
                         m_hit.push_back(image);
                 }
@@ -502,9 +544,108 @@ namespace ad
         }
     }
     //-------------------------------------------------------------------------
-    static inline int Distance(const uint64_t * a, const uint64_t * b)
+    // The nearest and second nearest of to's descriptions to one (its eight
+    // 32-bit words given), by bits that differ: the nearest's earliest
+    // index on ties, and the second counting every other, an equal one too.
+    struct TNearest
     {
-        return int(__popcnt64(a[0] ^ b[0]) + __popcnt64(a[1] ^ b[1]) + __popcnt64(a[2] ^ b[2]) + __popcnt64(a[3] ^ b[3]));
+        int best, second;
+        size_t bestIndex;
+    };
+
+    static TNearest NearestScalar(const uint32_t * query, const TKeypoints & to)
+    {
+        TNearest n = { INT32_MAX, INT32_MAX, 0 };
+        for (size_t j = 0, m = to.Size(); j < m; ++j)
+        {
+            const uint32_t * block = to.words.data() + (j / KEYPOINT_BLOCK) * KEYPOINT_BLOCK * 2 * KEYPOINT_WORDS;
+            const size_t lane = j % KEYPOINT_BLOCK;
+            int d = 0;
+            for (size_t w = 0; w < 2 * KEYPOINT_WORDS; ++w)
+                d += int(__popcnt(query[w] ^ block[w * KEYPOINT_BLOCK + lane]));
+            if (d < n.best)
+            {
+                n.second = n.best;
+                n.best = d;
+                n.bestIndex = j;
+            }
+            else if (d < n.second)
+                n.second = d;
+        }
+        return n;
+    }
+
+    // The same, a block at a time: each lane keeps its own nearest (the
+    // earliest on ties) and second, and the lanes merge into exactly what
+    // the scalar loop finds. Bits are counted by a nibble table per byte.
+    static TNearest NearestAvx2(const uint32_t * query, const TKeypoints & to)
+    {
+        static_assert(KEYPOINT_BLOCK == 8 && KEYPOINT_WORDS == 4, "a block is one register of 32-bit words");
+        const __m256i table = _mm256_setr_epi8(0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+            0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4);
+        const __m256i low = _mm256_set1_epi8(0x0f), ones8 = _mm256_set1_epi8(1), ones16 = _mm256_set1_epi16(1);
+        const __m256i step = _mm256_set1_epi32(KEYPOINT_BLOCK), none = _mm256_set1_epi32(INT32_MAX);
+        const __m256i count = _mm256_set1_epi32(int(to.Size()));
+        __m256i q[8];
+        for (int w = 0; w < 8; ++w)
+            q[w] = _mm256_set1_epi32(int(query[w]));
+        __m256i best = none, second = none, bestIndex = _mm256_setzero_si256();
+        __m256i index = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
+        const size_t blocks = (to.Size() + KEYPOINT_BLOCK - 1) / KEYPOINT_BLOCK;
+        for (size_t b = 0; b < blocks; ++b)
+        {
+            const __m256i * t = (const __m256i *)(to.words.data() + b * 64);
+            // At most 8 bits per byte from each of the 8 words: a byte holds the sum.
+            __m256i sum = _mm256_setzero_si256();
+            for (int w = 0; w < 8; ++w)
+            {
+                const __m256i x = _mm256_xor_si256(q[w], _mm256_loadu_si256(t + w));
+                sum = _mm256_add_epi8(sum, _mm256_add_epi8(_mm256_shuffle_epi8(table, _mm256_and_si256(x, low)),
+                    _mm256_shuffle_epi8(table, _mm256_and_si256(_mm256_srli_epi16(x, 4), low))));
+            }
+            __m256i d = _mm256_madd_epi16(_mm256_maddubs_epi16(sum, ones8), ones16);
+            // The padding past the last keypoint never comes near.
+            d = _mm256_blendv_epi8(none, d, _mm256_cmpgt_epi32(count, index));
+            const __m256i nearer = _mm256_cmpgt_epi32(best, d), nearerSecond = _mm256_cmpgt_epi32(second, d);
+            second = _mm256_blendv_epi8(second, _mm256_blendv_epi8(d, best, nearer), nearerSecond);
+            best = _mm256_blendv_epi8(best, d, nearer);
+            bestIndex = _mm256_blendv_epi8(bestIndex, index, nearer);
+            index = _mm256_add_epi32(index, step);
+        }
+        alignas(32) int32_t bests[8], seconds[8], indices[8];
+        _mm256_store_si256((__m256i *)bests, best);
+        _mm256_store_si256((__m256i *)seconds, second);
+        _mm256_store_si256((__m256i *)indices, bestIndex);
+        TNearest n = { INT32_MAX, INT32_MAX, 0 };
+        int lane = -1;
+        for (int l = 0; l < 8; ++l)
+            if (bests[l] < n.best || (bests[l] == n.best && size_t(indices[l]) < n.bestIndex))
+            {
+                n.best = bests[l];
+                n.bestIndex = size_t(indices[l]);
+                lane = l;
+            }
+        for (int l = 0; l < 8; ++l)
+        {
+            n.second = std::min(n.second, seconds[l]);
+            if (l != lane)
+                n.second = std::min(n.second, bests[l]);
+        }
+        return n;
+    }
+
+    static bool HasAvx2()
+    {
+        int info[4];
+        __cpuid(info, 0);
+        if (info[0] < 7)
+            return false;
+        __cpuid(info, 1);
+        const bool osSaves = (info[2] & (1 << 27)) != 0, avx = (info[2] & (1 << 28)) != 0;
+        if (!osSaves || !avx || (_xgetbv(0) & 6) != 6)
+            return false;
+        __cpuidex(info, 7, 0);
+        return (info[1] & (1 << 5)) != 0;
     }
 
     struct TMatch
@@ -568,27 +709,17 @@ namespace ad
 
     bool FindTransform(const TKeypoints & from, const TKeypoints & to, TAffine & transform, size_t * pInliers)
     {
+        static const bool avx2 = HasAvx2();
         std::vector<TMatch> matches;
+        uint64_t bits[KEYPOINT_WORDS];
         for (size_t i = 0, n = from.Size(), m = to.Size(); i < n; ++i)
         {
-            const uint64_t * query = from.bits.data() + i * KEYPOINT_WORDS;
-            int best = INT32_MAX, second = INT32_MAX;
-            size_t bestIndex = 0;
-            for (size_t j = 0; j < m; ++j)
+            from.Description(i, bits);
+            const uint32_t * query = (const uint32_t *)bits;
+            const TNearest nearest = avx2 ? NearestAvx2(query, to) : NearestScalar(query, to);
+            if (m >= 2 && nearest.best * RATIO_DENOMINATOR < nearest.second * RATIO_NUMERATOR)
             {
-                const int d = Distance(query, to.bits.data() + j * KEYPOINT_WORDS);
-                if (d < best)
-                {
-                    second = best;
-                    best = d;
-                    bestIndex = j;
-                }
-                else if (d < second)
-                    second = d;
-            }
-            if (m >= 2 && best * RATIO_DENOMINATOR < second * RATIO_NUMERATOR)
-            {
-                TMatch match = { from.x[i], from.y[i], to.x[bestIndex], to.y[bestIndex] };
+                TMatch match = { from.X(i), from.Y(i), to.X(nearest.bestIndex), to.Y(nearest.bestIndex) };
                 matches.push_back(match);
             }
         }
@@ -640,6 +771,51 @@ namespace ad
         if (pInliers)
             *pInliers = best.size();
         return true;
+    }
+
+    double MatchingSeconds(size_t keypoints, size_t threads)
+    {
+        // Two sets of random descriptions, the same for every call.
+        TKeypoints sets[2];
+        uint64_t state = 0x9E3779B97F4A7C15ull;
+        for (TKeypoints & set : sets)
+        {
+            std::vector<uint64_t> bits(keypoints * KEYPOINT_WORDS);
+            for (uint64_t & word : bits)
+            {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                word = state;
+            }
+            set.width = set.height = 1000;
+            set.x.assign(keypoints, 0);
+            set.y.assign(keypoints, 0);
+            set.SetDescriptions(bits);
+        }
+        threads = std::max<size_t>(threads, 1);
+        // Enough pairs per thread that starting the threads costs little
+        // beside them: a small level's pair takes under a millisecond.
+        const size_t repeats = std::max<size_t>(1, (size_t(16) << 20) / (keypoints * keypoints + 1));
+        // The faster of two rounds: the first can meet the threads' start.
+        double best = 0;
+        for (int round = 0; round < 2; ++round)
+        {
+            const auto start = std::chrono::steady_clock::now();
+            std::vector<std::thread> workers;
+            for (size_t i = 0; i < threads; ++i)
+                workers.emplace_back([&sets, repeats]()
+                {
+                    TAffine t;
+                    for (size_t r = 0; r < repeats; ++r)
+                        FindTransform(sets[0], sets[1], t, NULL);
+                });
+            for (std::thread & worker : workers)
+                worker.join();
+            const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            best = round == 0 ? seconds : std::min(best, seconds);
+        }
+        return best / (threads * repeats);
     }
     //-------------------------------------------------------------------------
     TBox OverlapBox(const TAffine & transform, size_t fixedWidth, size_t fixedHeight, size_t movingWidth, size_t movingHeight)
