@@ -278,7 +278,7 @@ namespace ad
         {
             const size_t reserve = std::max(ALIGN_MEMORY_RESERVE_BYTES,
                 size_t(double(status.ullTotalPhys) * ALIGN_MEMORY_RESERVE_SHARE));
-            const size_t taken = reserve + m_cacheBytes + FailedBytes();
+            const size_t taken = reserve + std::min(m_cacheBytes, ALIGN_CACHE_FLOOR_BYTES) + FailedBytes();
             // Memory is allocated against the commit limit (the memory and
             // the page file together), which other programs can have taken
             // more of than they use: what is free there can be less.

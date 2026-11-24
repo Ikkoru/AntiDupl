@@ -190,6 +190,11 @@ namespace ad
     // wait once Windows starts moving memory to the page file.
     const size_t ALIGN_MEMORY_RESERVE_BYTES = size_t(1) << 30;
     const double ALIGN_MEMORY_RESERVE_SHARE = 0.1; // of all the memory
+    // The decoded images' cache takes a share of the memory free, but gives
+    // it back when memory runs low (TButteraugliStore's MemoryLow): Auto
+    // leaves it no more than this, and the keypoints the rest. Counted
+    // whole, its default half of the memory free left the keypoints none.
+    const size_t ALIGN_CACHE_FLOOR_BYTES = size_t(512) << 20;
     // Hits an image needs in the keypoint index, and the images a key may
     // hold before it says too little. A key that fills up stops counting, so
     // more entries find the crops of a picture a folder has many copies of,
