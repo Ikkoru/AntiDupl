@@ -9,11 +9,11 @@
 # whatever the algorithm (their labels say they are the aligned search's),
 # Auto and 15 minutes in a fresh profile; (2) the profile keeps the level
 # chosen and the limit; (3) with the highest level set, a search of -Many
-# shows the time warning as it starts, while it runs, with the text for a
-# level kept though it takes longer than the limit; the search's window
-# says the crop size and the time; closing the warning brings the memory
-# warning, whose Stop button stops the search; it stays once the search has
-# ended, its Stop button off; (4) with Auto and the limit, the time warning
+# shows the memory warning as it starts, while it runs, with the text for a
+# level kept though it doesn't fit; the search's window says the crop size
+# and the time; closing the warning brings the time warning, whose Stop
+# button stops the search; it stays once the search has ended, its Stop
+# button off; (4) with Auto and the limit, the time warning
 # says the search looks for larger crops or at the lightest setting, and
 # its Stop button stops the search with no memory warning after; (5) with
 # Auto and no limit, only the memory warning shows, saying the search looks
@@ -138,24 +138,26 @@ function Stop-AdSearchBuild($p) {
 # (3) The highest level set: the time warning, then on Close the memory one.
 function Test-AdForced() {
     $p = Start-AdManySearch
-    $time = Wait-AdWindow $p $TimeTitle 180
-    Show-Check ([bool]$time) "(forced) the time warning shows as the search starts"
-    if (-not $time) { Stop-Process -Id $p.Id; return }
-    Test-AdText $time 'forced-time' @('Search will continue at your setting.')
-    $running = Test-AdSearching $p
-    Show-Check $running "(forced) the search runs meanwhile"
-    Show-Check ($script:AdWindowNames -like '*crops down to ~1/*, ~* total*') "(forced) the search's window says the crop size and the time"
-    "  windows: $script:AdWindowNames"
-    Show-Check (-not (Wait-AdWindow $p $MemoryTitle 2)) "(forced) no memory warning while the time warning is open"
-    Push-AdButton $time 'Close'
-    $memory = Wait-AdWindow $p $MemoryTitle 15
+    $memory = Wait-AdWindow $p $MemoryTitle 60
     if (-not $memory) {
-        'SKIP (forced) no memory warning after the time warning: the highest level fits in the memory free now'
+        'SKIP (forced) no memory warning: the highest level fits in the memory free now'
+        $time = Wait-AdWindow $p $TimeTitle 120
     } else {
-        Show-Check $true "(forced) closing the time warning brings the memory warning"
+        Show-Check $true "(forced) the memory warning shows as the search starts"
         Test-AdText $memory 'forced-memory' @('Search will continue at your setting, but Windows')
-        Test-AdStop $p $memory 'forced-memory' $MemoryTitle
+        $running = Test-AdSearching $p
+        Show-Check $running "(forced) the search runs meanwhile"
+        Show-Check ($script:AdWindowNames -like '*crops down to ~1/*, ~* total*') "(forced) the search's window says the crop size and the time"
+        "  windows: $script:AdWindowNames"
+        Show-Check (-not (Wait-AdWindow $p $TimeTitle 2)) "(forced) no time warning while the memory warning is open"
         Push-AdButton $memory 'Close'
+        $time = Wait-AdWindow $p $TimeTitle 15
+    }
+    Show-Check ([bool]$time) "(forced) the time warning shows (after the memory warning is closed)"
+    if ($time) {
+        Test-AdText $time 'forced-time' @('Search will continue at your setting.')
+        Test-AdStop $p $time 'forced-time' $TimeTitle
+        Push-AdButton $time 'Close'
     }
     Start-Sleep -Seconds 1
     Stop-AdSearchBuild $p
