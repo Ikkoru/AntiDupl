@@ -172,7 +172,7 @@ class AlignedSearch(ctypes.Structure):
     """adAlignedSearch: the level chosen by memory and time, and the progress."""
     _fields_ = [("wanted", ctypes.c_int32), ("used", ctypes.c_int32), ("memoryLevel", ctypes.c_int32),
                 ("timeLevel", ctypes.c_int32)] + [(n, ctypes.c_uint64) for n in (
-                    "wantedBytes", "usedBytes", "freeBytes", "wantedSeconds", "usedSeconds", "limitSeconds",
+                    "wantedBytes", "usedBytes", "freeBytes", "wantedSeconds", "usedSeconds", "topSeconds", "limitSeconds",
                     "imageCount", "alignedImages", "alignedSeconds")]
 
 

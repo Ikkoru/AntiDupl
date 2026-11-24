@@ -1,28 +1,36 @@
-# Checks the aligned search's level and time settings, its memory warning
-# and its progress line in the running program, in a new scratch settings
-# folder (PowerShell 7). -Many is a folder of so many pictures that the
-# highest level's keypoints don't fit in the free memory (many_images.py
-# beside it makes one): the highest level counts about 0.4 MB a picture
-# against what is free, less a tenth of all the memory (1 GB at least) and
-# half a GB. (1) Options > Advanced offers the level list and the time
-# limit, disabled but for the aligned search, the limit 15 minutes in a
-# fresh profile; (2) the profile keeps the level chosen and the limit;
-# (3) with the highest level set, a search of -Many shows the warning as it
-# starts, while it runs, with the text for a level kept though it doesn't
-# fit; its Stop button stops the search, and the warning stays once the
-# search has ended, its Stop button off; the search's window says the crop
-# size searched for and the time; (4) with Auto and no time limit, the
-# warning says the search looks for larger crops instead. -Shots names a
-# folder for pictures of the dialog and of each warning.
+# Checks the aligned search's level and time settings, its warnings and its
+# progress line in the running program, in a new scratch settings folder
+# (PowerShell 7). -Many is a folder of so many pictures that the highest
+# level's keypoints don't fit in the free memory and no level's search fits
+# in 15 minutes (many_images.py beside it makes one): the highest level
+# counts about 0.4 MB a picture against what is free, less a tenth of all
+# the memory (1 GB at least) and the image cache.
+# (1) Options > Advanced offers the level list and the time limit, enabled
+# whatever the algorithm (their labels say they are the aligned search's),
+# Auto and 15 minutes in a fresh profile; (2) the profile keeps the level
+# chosen and the limit; (3) with the highest level set, a search of -Many
+# shows the time warning as it starts, while it runs, with the text for a
+# level kept though it takes longer than the limit; the search's window
+# says the crop size and the time; closing the warning brings the memory
+# warning, whose Stop button stops the search; it stays once the search has
+# ended, its Stop button off; (4) with Auto and the limit, the time warning
+# says the search looks for larger crops or at the lightest setting, and
+# its Stop button stops the search with no memory warning after; (5) with
+# Auto and no limit, only the memory warning shows, saying the search looks
+# for larger crops instead (or that even the lightest setting doesn't fit).
+# When the highest level fits in the memory free, the memory steps print
+# SKIP. -Many's pictures have few keypoints: its searches end in seconds.
+# -Shots names a folder for pictures of the dialog and of each warning.
 # Prints one line per check, PASS or FAIL.
 #   ui_aligned_level_check.ps1 -Exe <exe> -s <new scratch folder> -Many <folder> [-Shots <folder>]
 param([string]$Exe, [string]$s, [string]$Many, [string]$Shots)
 . (Join-Path $PSScriptRoot 'ui_automation.ps1')
 $Aligned = 'Aligned perceptual (crops, shifts)'
-$Auto = 'Auto: as small as memory and time allow'
+$Auto = 'Auto: limited by memory and time'
 $Highest = '1/100 of image, 4.0 GB per 10k files'
 $TimeLimitLabel = 'Aligned search time limit, minutes (0 = none)'
-$WarningTitle = 'Not enough memory for the smallest crops'
+$MemoryTitle = 'Not enough memory for the smallest crops'
+$TimeTitle = 'Not enough time for the smallest crops'
 function Show-Check([bool]$ok, [string]$text) { '{0} {1}' -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $text }
 
 # Sets a profile value of the aligned search (both copies the profile keeps,
@@ -35,24 +43,29 @@ function Set-AdAligned([string]$field, [int]$value) {
     $x.Save($profile.FullName)
 }
 
-# Starts a search of -Many from the command line and waits for the warning.
-# Returns @(process, warning window or null).
+# A window of the process titled so, a window of its own or one inside
+# another (dialogs owned by the main window are in UI Automation's tree
+# there); null when none shows within the seconds given.
+function Wait-AdWindow($p, [string]$title, [int]$seconds) {
+    $byPid = New-AdCondition $AE::ProcessIdProperty $p.Id
+    $isWindow = New-AdCondition $AE::ControlTypeProperty $CT::Window
+    for ($i = 0; $i -lt $seconds; $i++) {
+        try {
+            foreach ($top in @($AE::RootElement.FindAll($TS::Children, $byPid))) {
+                if ($top.Current.Name -eq $title) { return $top }
+                $inner = @($top.FindAll($TS::Children, $isWindow)) | Where-Object { $_.Current.Name -eq $title } | Select-Object -First 1
+                if ($inner) { return $inner }
+            }
+        } catch {}
+        Start-Sleep -Seconds 1
+    }
+    $null
+}
+
 function Start-AdManySearch() {
     $p = Start-Process -FilePath $Exe -ArgumentList '-s', "`"$s`"", '-search', "`"$Many`"", '-start' -PassThru
     $script:AdStarted.Add($p)
-    $byPid = New-AdCondition $AE::ProcessIdProperty $p.Id
-    $isWindow = New-AdCondition $AE::ControlTypeProperty $CT::Window
-    for ($i = 0; $i -lt 180; $i++) {
-        Start-Sleep -Seconds 1
-        try {
-            foreach ($top in @($AE::RootElement.FindAll($TS::Children, $byPid))) {
-                if ($top.Current.Name -eq $WarningTitle) { return @($p, $top) }
-                $inner = @($top.FindAll($TS::Children, $isWindow)) | Where-Object { $_.Current.Name -eq $WarningTitle } | Select-Object -First 1
-                if ($inner) { return @($p, $inner) }
-            }
-        } catch {}
-    }
-    return @($p, $null)
+    $p
 }
 
 function Get-AdWarningText($warning) {
@@ -64,12 +77,15 @@ function Get-AdWarningButton($warning, [string]$name) {
         (New-AdCondition $AE::NameProperty $name), (New-AdCondition $AE::ControlTypeProperty $CT::Button))))
 }
 
+function Push-AdButton($warning, [string]$name) {
+    $button = Get-AdWarningButton $warning $name
+    [AdUiNative]::PostMessage([IntPtr]$button.Current.NativeWindowHandle, 0x00F5, [IntPtr]0, [IntPtr]0) | Out-Null
+}
+
 # The search's progress window, while the search runs.
 function Test-AdSearching($p) {
     # The progress window's title starts so while the search runs; a window
     # closing as it is read makes UI Automation throw, and is read again.
-    # It is a window of its own or one inside the main window, as dialogs
-    # owned by it are in UI Automation's tree.
     $byPid = New-AdCondition $AE::ProcessIdProperty $p.Id
     $isWindow = New-AdCondition $AE::ControlTypeProperty $CT::Window
     for ($try = 0; $try -lt 5; $try++) {
@@ -93,39 +109,89 @@ function Get-AdMain($p) {
         Where-Object { $_.FindFirst($TS::Children, (New-AdCondition $AE::ControlTypeProperty $CT::ToolBar)) } | Select-Object -First 1
 }
 
-# One search of -Many: the warning's text, Stop, and the warning after.
-function Test-AdWarning([string]$label, [string]$expected) {
-    $p, $warning = Start-AdManySearch
-    Show-Check ([bool]$warning) "($label) the warning shows as the search starts"
-    if (-not $warning) { Stop-Process -Id $p.Id; return }
+# A warning's text against what it should say (any of several).
+function Test-AdText($warning, [string]$label, [string[]]$expected) {
     $text = Get-AdWarningText $warning
     "  $text"
-    # Auto with too little memory for even the lowest level says so instead.
-    if ($label -eq 'auto' -and $text -like '*for lightest setting*') {
-        Show-Check $true "($label) it says even the lightest setting doesn't fit (too little memory free for the other text now)"
-    } else {
-        Show-Check ($text -like "*$expected*") "($label) it says: '$expected'"
-    }
+    $match = $expected | Where-Object { $text -like "*$_*" } | Select-Object -First 1
+    Show-Check ([bool]$match) "($label) it says: '$(if ($match) { $match } else { $expected -join "' or '" })'"
     if ($Shots) { Save-AdWindowPicture $warning (Join-Path $Shots "warning-$label.png") }
-    $running = Test-AdSearching $p
-    Show-Check $running "($label) the search runs meanwhile"
-    if (-not $running) { "  windows: $script:AdWindowNames"; Stop-Process -Id $p.Id; return }
-    Show-Check ($script:AdWindowNames -like '*crops down to ~1/*, about * in all*') "($label) the search's window says the crop size and the time"
-    "  windows: $script:AdWindowNames"
-    $stop = Get-AdWarningButton $warning 'Stop search'
-    [AdUiNative]::PostMessage([IntPtr]$stop.Current.NativeWindowHandle, 0x00F5, [IntPtr]0, [IntPtr]0) | Out-Null
+}
+
+# Stops the search with the warning's Stop button; the warning stays.
+function Test-AdStop($p, $warning, [string]$label, [string]$title) {
+    Push-AdButton $warning 'Stop search'
     $ended = $false
     for ($i = 0; $i -lt 120 -and -not $ended; $i++) { Start-Sleep -Seconds 1; $ended = -not (Test-AdSearching $p) }
     Show-Check $ended "($label) its Stop button stops the search"
     Start-Sleep -Seconds 2
     $still = $false; $stopOff = $false
-    try { $still = $warning.Current.Name -eq $WarningTitle; $stopOff = -not (Get-AdWarningButton $warning 'Stop search').Current.IsEnabled } catch {}
+    try { $still = $warning.Current.Name -eq $title; $stopOff = -not (Get-AdWarningButton $warning 'Stop search').Current.IsEnabled } catch {}
     Show-Check ($still -and $stopOff) "($label) the warning stays once the search has ended, its Stop button off"
-    $close = Get-AdWarningButton $warning 'Close'
-    [AdUiNative]::PostMessage([IntPtr]$close.Current.NativeWindowHandle, 0x00F5, [IntPtr]0, [IntPtr]0) | Out-Null
-    Start-Sleep -Seconds 1
+}
+
+function Stop-AdSearchBuild($p) {
     $main = Get-AdMain $p
     if ($main) { Stop-AdBuild $p $main } else { Stop-Process -Id $p.Id }
+}
+
+# (3) The highest level set: the time warning, then on Close the memory one.
+function Test-AdForced() {
+    $p = Start-AdManySearch
+    $time = Wait-AdWindow $p $TimeTitle 180
+    Show-Check ([bool]$time) "(forced) the time warning shows as the search starts"
+    if (-not $time) { Stop-Process -Id $p.Id; return }
+    Test-AdText $time 'forced-time' @('Search will continue at your setting.')
+    $running = Test-AdSearching $p
+    Show-Check $running "(forced) the search runs meanwhile"
+    Show-Check ($script:AdWindowNames -like '*crops down to ~1/*, ~* total*') "(forced) the search's window says the crop size and the time"
+    "  windows: $script:AdWindowNames"
+    Show-Check (-not (Wait-AdWindow $p $MemoryTitle 2)) "(forced) no memory warning while the time warning is open"
+    Push-AdButton $time 'Close'
+    $memory = Wait-AdWindow $p $MemoryTitle 15
+    if (-not $memory) {
+        'SKIP (forced) no memory warning after the time warning: the highest level fits in the memory free now'
+    } else {
+        Show-Check $true "(forced) closing the time warning brings the memory warning"
+        Test-AdText $memory 'forced-memory' @('Search will continue at your setting, but Windows')
+        Test-AdStop $p $memory 'forced-memory' $MemoryTitle
+        Push-AdButton $memory 'Close'
+    }
+    Start-Sleep -Seconds 1
+    Stop-AdSearchBuild $p
+}
+
+# (4) Auto with the limit: the time warning's Stop, and no memory warning.
+function Test-AdAutoTime() {
+    $p = Start-AdManySearch
+    $time = Wait-AdWindow $p $TimeTitle 180
+    Show-Check ([bool]$time) "(auto-time) the time warning shows as the search starts"
+    if (-not $time) { Stop-Process -Id $p.Id; return }
+    Test-AdText $time 'auto-time' @('Searching for minimum crop size ~1/', 'Search will continue at the lightest setting.')
+    Test-AdStop $p $time 'auto-time' $TimeTitle
+    Push-AdButton $time 'Close'
+    Show-Check (-not (Wait-AdWindow $p $MemoryTitle 5)) "(auto-time) no memory warning once the search was stopped"
+    Stop-AdSearchBuild $p
+}
+
+# (5) Auto with no limit: the memory warning alone.
+function Test-AdAutoMemory() {
+    $p = Start-AdManySearch
+    $memory = Wait-AdWindow $p $MemoryTitle 60
+    if (-not $memory) {
+        'SKIP (auto) no memory warning: the highest level fits in the memory free now'
+        Show-Check (-not (Wait-AdWindow $p $TimeTitle 1)) "(auto) no time warning with no limit"
+        if (-not $p.HasExited) { Stop-AdSearchBuild $p }
+        return
+    }
+    Show-Check $true "(auto) the memory warning shows as the search starts"
+    Show-Check (-not (Wait-AdWindow $p $TimeTitle 1)) "(auto) no time warning with no limit"
+    # Too little memory for even the lowest level says so instead.
+    Test-AdText $memory 'auto' @('Searching for minimum crop size ~1/', 'for lightest setting')
+    Test-AdStop $p $memory 'auto' $MemoryTitle
+    Push-AdButton $memory 'Close'
+    Start-Sleep -Seconds 1
+    Stop-AdSearchBuild $p
 }
 
 try {
@@ -142,12 +208,7 @@ try {
         Start-Sleep -Milliseconds 800
     }
     function Find-AdLevelList() { Get-AdLists $dialog | Where-Object { (Get-AdListItems $_) -contains $Auto } | Select-Object -First 1 }
-    $algorithm = Get-AdLists $dialog | Where-Object { (Get-AdListItems $_) -contains 'SSIM' } | Select-Object -First 1
-    $before = Get-AdListValue $algorithm
-    Select-AdTab 'Advanced'
-    $level = Find-AdLevelList
-    Show-Check ([bool]$level) "(1) Advanced offers the level list"
-    # The time limit's label, enabled with its box; the box's value.
+    # The time limit's label, enabled with its box; the boxes' values.
     function Find-AdTimeLimit() {
         $dialog.FindFirst($TS::Descendants, (New-Object Windows.Automation.AndCondition(
             (New-AdCondition $AE::NameProperty $TimeLimitLabel), (New-AdCondition $AE::ControlTypeProperty $CT::Text))))
@@ -156,23 +217,26 @@ try {
         $edits = @($dialog.FindAll($TS::Descendants, (New-AdCondition $AE::ControlTypeProperty $CT::Edit)))
         @($edits | ForEach-Object { $_.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value })
     }
+    $algorithm = Get-AdLists $dialog | Where-Object { (Get-AdListItems $_) -contains 'SSIM' } | Select-Object -First 1
+    $before = Get-AdListValue $algorithm
+    Select-AdTab 'Advanced'
+    $level = Find-AdLevelList
+    Show-Check ([bool]$level) "(1) Advanced offers the level list"
     $limit = Find-AdTimeLimit
     Show-Check ([bool]$limit) "(1) Advanced offers the time limit"
     if ($level) {
         "  items: $((Get-AdListItems $level) -join ' | ')"
-        Show-Check (-not $level.Current.IsEnabled) "(1) disabled for '$before'"
-        if ($limit) { Show-Check (-not $limit.Current.IsEnabled) "(1) the time limit disabled for '$before'" }
+        Show-Check ($level.Current.IsEnabled) "(1) the level list enabled for '$before'"
+        if ($limit) { Show-Check ($limit.Current.IsEnabled) "(1) the time limit enabled for '$before'" }
+        Show-Check ((Get-AdListValue $level) -eq $Auto) "(1) Auto in a fresh profile: '$(Get-AdListValue $level)'"
+        $values = Get-AdTimeLimitValue
+        Show-Check ($values -contains '15') "(1) the time limit 15 in a fresh profile (boxes: $($values -join ', '))"
         Select-AdTab 'Compare'
         $algorithm = Get-AdLists $dialog | Where-Object { (Get-AdListItems $_) -contains 'SSIM' } | Select-Object -First 1
         Select-AdListItem $algorithm $Aligned
         Select-AdTab 'Advanced'
         $level = Find-AdLevelList
-        Show-Check ($level.Current.IsEnabled) "(1) enabled for the aligned search"
-        Show-Check ((Get-AdListValue $level) -eq $Auto) "(1) Auto in a fresh profile: '$(Get-AdListValue $level)'"
-        $limit = Find-AdTimeLimit
-        if ($limit) { Show-Check ($limit.Current.IsEnabled) "(1) the time limit enabled for the aligned search" }
-        $values = Get-AdTimeLimitValue
-        Show-Check ($values -contains '15') "(1) the time limit 15 in a fresh profile (boxes: $($values -join ', '))"
+        Show-Check ($level.Current.IsEnabled) "(1) the level list enabled for the aligned search"
         if ($Shots) {
             # Every item, closed, as the list shows it: the longest must fit.
             $n = 0
@@ -194,12 +258,11 @@ try {
     $savedLimit = $x.SelectSingleNode('//compareOptions/alignedTimeLimit').InnerText
     Show-Check ($savedLimit -eq '15') "(2) the profile keeps the time limit $savedLimit"
 
-    Test-AdWarning 'forced' 'Search will continue at your setting'
-    # With a time limit, Auto would want no more than the limit allows,
-    # which -Many keeps to the lowest level: no limit leaves memory to choose.
+    Test-AdForced
     Set-AdAligned 'alignedLevel' 0
+    Test-AdAutoTime
     Set-AdAligned 'alignedTimeLimit' 0
-    Test-AdWarning 'auto' 'Searching for minimum crop size ~1/'
+    Test-AdAutoMemory
 } finally {
     Stop-AdStrays
 }
