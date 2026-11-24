@@ -1,5 +1,5 @@
-# Each algorithm keeps the threshold last used with it (and Butteraugli one
-# per working size): switching away and back, in the tool bar and in the
+# Each algorithm keeps the threshold last used with it (and Butteraugli and
+# the aligned search one per working size): switching away and back, in the tool bar and in the
 # Options dialog, and after a restart. Prints ok/FAIL per check and PASS or
 # FAIL at the end.
 #   pwsh -File ui_threshold_memory_check.ps1 -Exe <bin\Release\AntiDupl.NET.WinForms.exe> -s <new scratch folder>
@@ -64,6 +64,22 @@ Select-AdListItem $dSize '768 px'
 Check 'dialog, back to 768 px' (Get-AdListValue $dThreshold) '7.5'
 Select-AdListItem $dSize '512 px'
 Check 'dialog, back to 512 px' (Get-AdListValue $dThreshold) '5.5'
+# The aligned search keeps its own, also one per working size (builds with
+# it only). Its 768 px step is what tells one threshold per size from one
+# for all sizes.
+if ((Get-AdListItems $dAlgorithm) -contains 'Aligned perceptual (crops, shifts)') {
+    Select-AdListItem $dAlgorithm 'Aligned perceptual (crops, shifts)'
+    Check 'dialog, aligned at 512 px first time (its default)' (Get-AdListValue $dThreshold) '9'
+    Select-AdListItem $dThreshold '6.5'
+    Select-AdListItem $dSize '768 px'
+    Check 'dialog, aligned at 768 px first time (its default)' (Get-AdListValue $dThreshold) '12'  # THRESHOLD_DIFFERENCE_DEFAULT_BUTTERAUGLI[768]
+    Select-AdListItem $dSize '512 px'
+    Check 'dialog, aligned back to 512 px' (Get-AdListValue $dThreshold) '6.5'
+    Select-AdListItem $dAlgorithm 'Perceptual (Butteraugli)'
+    Check 'dialog, Butteraugli at 512 px kept apart from aligned' (Get-AdListValue $dThreshold) '5.5'
+} else {
+    'skip the aligned checks: this build has no aligned search'
+}
 Send-AdButton $dialog 'Set default'
 Start-Sleep -Seconds 1
 Check 'dialog, Set default' "$(Get-AdListValue $dAlgorithm) / $(Get-AdListValue $dThreshold)" 'Mean square difference / 5 %'
