@@ -8,6 +8,9 @@ SCORES_TSV    a table with `n` and the pair's aligned score in `aligned` or
               `aligned-768`, for the pairs that show the same picture
 PAIRS_DIR     one folder per pair, named by its number, with its two images
 --limit       the aligned score a pair counts as a copy up to (default 15)
+--resdet EXE  also ask resdet (upscale_grid.resdet) whether the larger
+              image was blown up from the smaller's width or height (within
+              2 %): its confidence, 0 for no
 
 Prints per pair of at least 1.15 times the pixels: its number, the decision,
 what the user kept, the scale, line_detail and whether it is flagged; then how
@@ -29,14 +32,18 @@ def main():
     ap.add_argument("scores")
     ap.add_argument("pairs")
     ap.add_argument("--limit", type=float, default=15)
+    ap.add_argument("--resdet")
     a = ap.parse_args()
+    if a.resdet:
+        from PIL import Image
+        import upscale_grid
     with open(a.scores, encoding="utf-8", newline="") as f:
         scores = {r["n"]: r.get("aligned") or r.get("aligned-768") or "" for r in csv.DictReader(f, delimiter="\t")}
     with open(a.analysis, encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f, delimiter="\t"))
 
     seen, tally = set(), {}
-    print("pair  decision  kept  scale  line detail  flagged")
+    print("pair  decision  kept  scale  line detail  flagged" + ("  resdet" if a.resdet else ""))
     for r in sorted(rows, key=lambda r: int(r["n"])):
         score = scores.get(r["n"], "")
         first, second = int(r.get("first_px") or 0), int(r.get("second_px") or 0)
@@ -53,7 +60,11 @@ def main():
         value = sm.line_detail(os.path.join(folder, small), os.path.join(folder, large))
         kept = "both" if not r.get("gone") else "larger" if (r["gone"] == "second") == (first > second) else "smaller"
         flagged = value < sm.UPSCALED_LINE_DETAIL
-        print(f'{r["n"]:>5}  {r["decision"]:8}  {kept:7}  {(max(first, second) / min(first, second)) ** 0.5:5.2f}  {value:5.2f}  {"upscale" if flagged else ""}', flush=True)
+        extra = ""
+        if a.resdet:
+            at, _ = upscale_grid.resdet(a.resdet, os.path.join(folder, large), Image.open(os.path.join(folder, small)).size)
+            extra = f"  {at:.2f}"
+        print(f'{r["n"]:>5}  {r["decision"]:8}  {kept:7}  {(max(first, second) / min(first, second)) ** 0.5:5.2f}  {value:5.2f}  {"upscale" if flagged else "":7}{extra}', flush=True)
         tally[kept, flagged] = tally.get((kept, flagged), 0) + 1
     print()
     for (kept, flagged), n in sorted(tally.items()):
